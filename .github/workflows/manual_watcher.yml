@@ -1,0 +1,79 @@
+name: Ton.AI Manual Queue Watcher
+
+on:
+  schedule:
+    # Poll RTDB manual_queue ทุก 5 นาที
+    - cron: '*/5 * * * *'
+
+  workflow_dispatch:
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install firebase-admin
+
+      - name: Setup Firebase credentials
+        env:
+          FIREBASE_SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SA_JSON" ]; then
+            echo "FIREBASE_SERVICE_ACCOUNT secret missing — exit"
+            exit 1
+          fi
+          echo "$FIREBASE_SA_JSON" > firebase-service-account.json
+
+      - name: Process pending manual posts
+        env:
+          GEMINI_API_KEY:            ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:            ${{ secrets.PEXELS_API_KEY }}
+          FACEBOOK_PAGE_ID:          ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_ACCESS_TOKEN:     ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+          FACEBOOK_PAGES:            ${{ secrets.FACEBOOK_PAGES }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          CONTENT_NICHE:             ${{ secrets.CONTENT_NICHE }}
+          LINE_CONTENT_NICHE:        ${{ secrets.LINE_CONTENT_NICHE }}
+          ENABLE_FACEBOOK:           'true'
+          ENABLE_LINE:               'true'
+          ENABLE_TIKTOK:             'false'
+        run: |
+          python -c "
+          import os, time
+          from dotenv import load_dotenv
+          load_dotenv()
+          from config import Config
+          from content_generator import ContentGenerator
+          import manual_watcher
+          import firestore_sync as fs
+          if not fs._init():
+              print('RTDB not available, exit')
+              exit(0)
+          db = fs._db
+          # อ่าน queue ครั้งเดียว แล้วประมวลผล pending items
+          data = db.reference('manual_queue').get() or {}
+          pending = [(k, v) for k, v in data.items() if isinstance(v, dict) and v.get('status') == 'pending']
+          print(f'Found {len(pending)} pending posts')
+          if not pending:
+              exit(0)
+          config = Config()
+          generator = ContentGenerator(config)
+          for post_id, item in pending:
+              print(f'Processing {post_id}')
+              manual_watcher.process_manual_post(post_id, item, config, generator)
+          print('Done')
+          "

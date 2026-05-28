@@ -1,0 +1,160 @@
+"""
+LINE Messaging API Auto Poster
+LINE Notify ถูกปิดแล้วตั้งแต่ March 2025
+ใช้ LINE Messaging API (Official Account) แทน
+
+ขั้นตอนรับ token:
+1. สมัคร LINE OA: https://manager.line.biz/
+2. ไป LINE Developers: https://developers.line.biz/
+3. สร้าง Messaging API channel
+4. Issue Channel Access Token (long-lived)
+
+FREE plan: 200 messages/เดือน
+"""
+import requests
+import logging
+from content_generator import GeneratedContent
+from config import Config
+
+logger = logging.getLogger(__name__)
+
+API_BASE = "https://api.line.me/v2/bot"
+
+
+class LinePoster:
+    def __init__(self, config: Config):
+        self.token = config.line_channel_access_token
+
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+        }
+
+    def broadcast_text(self, text: str) -> dict:
+        """Broadcast ข้อความ raw text (ใช้ใน manual post)"""
+        if not self.token:
+            raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
+        payload = {"messages": [{"type": "text", "text": text[:5000]}]}
+        r = requests.post(f"{API_BASE}/message/broadcast",
+                          headers=self._headers(), json=payload, timeout=30)
+        if r.status_code != 200:
+            raise Exception(f"LINE broadcast failed: {r.status_code} {r.text}")
+        return {"platform": "line", "status": "success"}
+
+    def broadcast(self, content: GeneratedContent) -> dict:
+        """Broadcast ข้อความธรรมดาถึง followers ทั้งหมด"""
+        if not self.token:
+            raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
+
+        hashtags_str = " ".join(content.hashtags)
+        text = f"{content.line_message}\n\n{hashtags_str}\n\n{content.call_to_action}"
+
+        payload = {
+            "messages": [{"type": "text", "text": text[:5000]}]
+        }
+
+        response = requests.post(
+            f"{API_BASE}/message/broadcast",
+            headers=self._headers(),
+            json=payload,
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            raise Exception(f"LINE Broadcast ล้มเหลว: {response.status_code} — {response.text}")
+
+        logger.info("LINE Broadcast สำเร็จ")
+        return {"platform": "line", "status": "success"}
+
+    def broadcast_flex(self, content: GeneratedContent) -> dict:
+        """Broadcast แบบ Flex Message (card สวยงาม)"""
+        if not self.token:
+            raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
+
+        flex_message = {
+            "type": "flex",
+            "altText": content.topic,
+            "contents": {
+                "type": "bubble",
+                "size": "mega",
+                "header": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "backgroundColor": "#1D4ED8",
+                    "paddingAll": "lg",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": content.topic,
+                            "color": "#FFFFFF",
+                            "weight": "bold",
+                            "size": "md",
+                            "wrap": True,
+                        }
+                    ],
+                },
+                "body": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "spacing": "md",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": content.line_message[:2000],
+                            "wrap": True,
+                            "size": "sm",
+                            "color": "#374151",
+                        },
+                        {"type": "separator"},
+                        {
+                            "type": "text",
+                            "text": " ".join(content.hashtags),
+                            "wrap": True,
+                            "size": "xs",
+                            "color": "#2563EB",
+                        },
+                    ],
+                },
+                "footer": {
+                    "type": "box",
+                    "layout": "vertical",
+                    "contents": [
+                        {
+                            "type": "button",
+                            "style": "primary",
+                            "color": "#1D4ED8",
+                            "action": {
+                                "type": "message",
+                                "label": content.call_to_action[:20],
+                                "text": content.call_to_action[:20],
+                            },
+                        }
+                    ],
+                },
+            },
+        }
+
+        payload = {"messages": [flex_message]}
+        response = requests.post(
+            f"{API_BASE}/message/broadcast",
+            headers=self._headers(),
+            json=payload,
+            timeout=30,
+        )
+
+        if response.status_code != 200:
+            raise Exception(f"LINE Flex Broadcast ล้มเหลว: {response.status_code} — {response.text}")
+
+        logger.info("LINE Flex Broadcast สำเร็จ")
+        return {"platform": "line_flex", "status": "success"}
+
+    def get_follower_count(self) -> int:
+        """ดูจำนวน followers"""
+        response = requests.get(
+            f"{API_BASE}/followers/count",
+            headers=self._headers(),
+            timeout=30,
+        )
+        data = response.json()
+        return data.get("count", 0)

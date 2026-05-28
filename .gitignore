@@ -1,0 +1,23 @@
+# Secrets — NEVER commit
+.env
+firebase-service-account.json
+_tiktok_state.json
+_test_*.py
+_fb_refresh_*.py
+_fix_*.py
+_update_*.py
+_list_*.py
+
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Logs
+service.log
+post_logs/
+current_status.json
+
+# IDE
+.vscode/
+.idea/

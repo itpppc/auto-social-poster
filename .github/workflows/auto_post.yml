@@ -1,0 +1,106 @@
+name: Ton.AI Auto Poster
+
+on:
+  # ตั้งเวลาโพสต์ 8 รอบ/วัน (UTC) — ไทยช้ากว่า UTC 7 ชั่วโมง
+  # 01:00 UTC = 08:00 ไทย
+  # 03:00 UTC = 10:00 ไทย
+  # 05:00 UTC = 12:00 ไทย
+  # 07:00 UTC = 14:00 ไทย
+  # 09:00 UTC = 16:00 ไทย
+  # 11:00 UTC = 18:00 ไทย
+  # 13:00 UTC = 20:00 ไทย
+  # 15:00 UTC = 22:00 ไทย
+  schedule:
+    - cron: '0 1 * * *'   # 08:00 น. ไทย
+    - cron: '0 3 * * *'   # 10:00 น. ไทย
+    - cron: '0 5 * * *'   # 12:00 น. ไทย
+    - cron: '0 7 * * *'   # 14:00 น. ไทย
+    - cron: '0 9 * * *'   # 16:00 น. ไทย
+    - cron: '0 11 * * *'  # 18:00 น. ไทย
+    - cron: '0 13 * * *'  # 20:00 น. ไทย
+    - cron: '0 15 * * *'  # 22:00 น. ไทย
+
+  # รันด้วยตนเองจาก GitHub UI
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: 'หัวข้อ (เว้นว่างให้ AI สุ่ม)'
+        required: false
+        default: ''
+      niche:
+        description: 'เปลี่ยน niche ชั่วคราว'
+        required: false
+        default: ''
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install firebase-admin
+
+      - name: Setup Firebase credentials
+        env:
+          FIREBASE_SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -n "$FIREBASE_SA_JSON" ]; then
+            echo "$FIREBASE_SA_JSON" > firebase-service-account.json
+            echo "[OK] Firebase service account written"
+          else
+            echo "[WARN] FIREBASE_SERVICE_ACCOUNT secret not set — RTDB sync will be skipped"
+          fi
+
+      - name: Run auto poster
+        env:
+          GEMINI_API_KEY:            ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY:            ${{ secrets.PEXELS_API_KEY }}
+          FACEBOOK_PAGE_ID:          ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_ACCESS_TOKEN:     ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+          FACEBOOK_PAGES:            ${{ secrets.FACEBOOK_PAGES }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          TIKTOK_CLIENT_KEY:         ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET:      ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_ACCESS_TOKEN:       ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          CONTENT_NICHE:             ${{ secrets.CONTENT_NICHE }}
+          LINE_CONTENT_NICHE:        ${{ secrets.LINE_CONTENT_NICHE }}
+          POST_TIMES:                '08:00,10:00,12:00,14:00,16:00,18:00,20:00,22:00'
+          ENABLE_FACEBOOK:           'true'
+          ENABLE_LINE:               'true'
+          ENABLE_TIKTOK:             'false'
+        run: |
+          TOPIC="${{ github.event.inputs.topic }}"
+          NICHE="${{ github.event.inputs.niche }}"
+
+          CMD="python main.py --now"
+          [ -n "$TOPIC" ] && CMD="$CMD --topic \"$TOPIC\""
+          [ -n "$NICHE" ] && CMD="$CMD --niche \"$NICHE\""
+
+          echo "Running: $CMD"
+          eval $CMD
+
+      - name: Upload post logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-logs-${{ github.run_number }}
+          path: post_logs/
+          retention-days: 30
+
+
+# ═══════════════════════════════════════════════════
+# Workflow 2: Manual Queue Watcher
+# ═══════════════════════════════════════════════════
