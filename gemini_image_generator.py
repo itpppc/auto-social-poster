@@ -35,28 +35,56 @@ class GeminiImageGenerator:
             self._client = genai.Client(api_key=self.api_key)
         return self._client
 
-    def _fallback_prompt(self, topic: str, niche: str) -> str:
-        """สร้าง prompt ตรงๆ จาก niche/topic — ไม่ต้องใช้ Gemini"""
-        # Map Thai niches → English visual themes
-        n = (niche or "").lower()
-        if any(k in n for k in ["smart factory", "iot", "oee", "industry", "โรงงาน", "ฟาร์ม"]):
-            scene = "modern smart factory floor with IoT sensors and digital OEE dashboard screens"
-        elif any(k in n for k in ["cctv", "ai", "surveillance"]):
-            scene = "professional control room with multiple CCTV monitor screens and AI detection overlays"
-        elif any(k in n for k in ["network", "server", "cybersecurity"]):
-            scene = "modern data center with server racks, network equipment, blue LED lighting"
-        elif any(k in n for k in ["social media", "marketing", "facebook ads"]):
-            scene = "social media marketing dashboard on laptop screen with analytics graphs going up"
-        elif any(k in n for k in ["อาหาร", "ทะเล", "ขนมจีน", "สลัด", "ออร์แกนิค"]):
-            scene = "premium Thai food photography, delicious freshly prepared dish on rustic wooden table"
-        elif any(k in n for k in ["ไอที", "คอมพิวเตอร์", "โน๊ตบุ๊ค"]):
-            scene = "professional workspace with modern laptops, IT equipment, clean tech aesthetic"
+    def _fallback_prompt(self, topic: str, niche: str, content_summary: str = "") -> str:
+        """สร้าง prompt ตรงเนื้อหา — รวม topic + niche + content keywords"""
+        # ดึง keyword จาก topic/content
+        text = f"{topic} {niche} {content_summary}".lower()
+
+        # หาว่าเนื้อหาเกี่ยวกับอะไรเป็นหลัก
+        themes = []
+        keyword_map = [
+            (["smart factory","oee","downtime","โรงงาน","สายการผลิต","plc","scada"],
+             "modern smart factory production line with real-time OEE dashboard monitors, robotic arms, industrial IoT sensors, blue LED indicator lights"),
+            (["aqua","ฟาร์มกุ้ง","ฟาร์มปลา","do","ph","แอมโมเนีย","น้ำ"],
+             "shrimp/fish farm pond with IoT water quality sensors floating, beautiful sunset lighting over aquaculture facility"),
+            (["cctv","กล้อง","สำรวจ","ai detection","ตรวจจับ","surveillance"],
+             "modern security control room with wall of CCTV monitors showing AI-detected people and vehicles with overlay boxes"),
+            (["network","เครือข่าย","server","เซิร์ฟเวอร์","firewall","lan"],
+             "modern enterprise data center with neat server racks, blue LED status lights, fiber optic cables"),
+            (["cybersecurity","ปลอดภัย","ไซเบอร์","pentest","siem","zero trust"],
+             "cybersecurity operations center, multiple monitors showing security dashboards, abstract digital lock graphics"),
+            (["social media","facebook ads","tiktok","instagram","การตลาด","marketing"],
+             "modern marketing workspace with laptop showing social media analytics dashboard with growing engagement graphs, smartphone displaying ads"),
+            (["custom software","erp","mes","mobile app","web app","ซอฟต์แวร์"],
+             "developer workspace with multiple monitors displaying clean code, modern UI mockups, professional tech office"),
+            (["ขนมจีน","น้ำยา","อาหารใต้","อาหารทะเล","seafood"],
+             "premium Thai southern food photography, beautiful bowl of Khanom Jeen with curry sauce, fresh seafood on rustic wooden table, top down shot"),
+            (["สลัด","ผักออร์แกนิค","คลีน","ไฮโดรโปนิค","organic"],
+             "vibrant fresh salad bowl photography, colorful organic vegetables, hydroponic greens, healthy meal styling on wooden table"),
+            (["คอมพิวเตอร์มือสอง","โน๊ตบุ๊ค","ไอที","laptop","คอมพ์"],
+             "modern professional laptop on clean desk with smartphone and tech accessories, soft natural lighting"),
+            (["ai","artificial intelligence","ปัญญาประดิษฐ์","gpt","gemini"],
+             "futuristic AI concept visualization, abstract neural network connections, glowing blue circuit patterns on dark background"),
+            (["dashboard","แสดงผล","สถิติ","กราฟ"],
+             "modern business intelligence dashboard on large screen, beautiful data visualization with charts and KPIs"),
+        ]
+
+        for keywords, scene in keyword_map:
+            if any(k in text for k in keywords):
+                themes.append(scene)
+
+        # ถ้าเจอหลายธีม รวม 2 อันแรก
+        if themes:
+            scene = themes[0] if len(themes) == 1 else f"{themes[0]}, with elements of {themes[1].split(',')[0]}"
         else:
-            scene = f"professional business scene related to {niche[:60]}"
+            # generic professional business
+            niche_clean = (niche or "business")[:80]
+            scene = f"professional commercial photo representing {niche_clean}, modern stylish composition"
 
         return (f"{scene}, photorealistic commercial photography, "
-                f"vibrant lighting, blue and orange accent colors, "
-                f"shallow depth of field, 16:9 composition, high quality, no text, no logos")
+                f"cinematic lighting, vibrant blue and orange accents, "
+                f"shallow depth of field, ultra detailed, 16:9 composition, "
+                f"no text, no watermarks, no logos, advertising quality")
 
     def generate_prompt(self, topic: str, niche: str, content_summary: str = "") -> str:
         """พยายามให้ Gemini ทำ prompt ก่อน — fallback ถ้า quota หมด"""
@@ -90,8 +118,8 @@ Reply with the prompt ONLY."""
                 else:
                     break
 
-        fallback = self._fallback_prompt(topic, niche)
-        logger.info(f"Fallback prompt: {fallback[:80]}")
+        fallback = self._fallback_prompt(topic, niche, content_summary)
+        logger.info(f"Fallback prompt: {fallback[:100]}")
         return fallback
 
     def generate_image(self, prompt: str, output_path: Optional[str] = None,

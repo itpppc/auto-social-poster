@@ -32,7 +32,7 @@ class LinePoster:
         }
 
     def broadcast_text(self, text: str) -> dict:
-        """Broadcast ข้อความ raw text (ใช้ใน manual post)"""
+        """Broadcast ข้อความ raw text"""
         if not self.token:
             raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
         payload = {"messages": [{"type": "text", "text": text[:5000]}]}
@@ -41,6 +41,41 @@ class LinePoster:
         if r.status_code != 200:
             raise Exception(f"LINE broadcast failed: {r.status_code} {r.text}")
         return {"platform": "line", "status": "success"}
+
+    def broadcast_with_media(self, text: str, media_url: str,
+                              media_type: str = "image",
+                              preview_url: str = None) -> dict:
+        """Broadcast ข้อความ + รูป/วีดีโอ
+        media_type: 'image' | 'video'
+        media_url: public HTTPS URL
+        preview_url: thumbnail (จำเป็นถ้า video)
+        """
+        if not self.token:
+            raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
+
+        messages = []
+        if text:
+            messages.append({"type": "text", "text": text[:5000]})
+
+        if media_type == "image":
+            messages.append({
+                "type": "image",
+                "originalContentUrl": media_url,
+                "previewImageUrl": preview_url or media_url,
+            })
+        elif media_type == "video":
+            messages.append({
+                "type": "video",
+                "originalContentUrl": media_url,
+                "previewImageUrl": preview_url or media_url,
+            })
+
+        payload = {"messages": messages[:5]}
+        r = requests.post(f"{API_BASE}/message/broadcast",
+                          headers=self._headers(), json=payload, timeout=60)
+        if r.status_code != 200:
+            raise Exception(f"LINE media broadcast failed: {r.status_code} {r.text[:300]}")
+        return {"platform": "line", "status": "success", "media_type": media_type}
 
     def broadcast(self, content: GeneratedContent) -> dict:
         """Broadcast ข้อความธรรมดาถึง followers ทั้งหมด"""

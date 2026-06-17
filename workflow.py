@@ -147,11 +147,57 @@ class AutoPosterWorkflow:
                 else:
                     line_content = content
                 st.set_line_preview(line_content.line_message)
+
+                # ลองสร้าง media สำหรับ LINE
+                line_media_url = None
+                line_media_type = None
+                line_preview_url = None
                 try:
-                    data = self.line.broadcast_flex(line_content)
+                    from media_uploader import upload_media
+                    from datetime import datetime
+                    hr = datetime.now().hour
+                    use_video_line = self.ai_video and hr == 18  # video เฉพาะรอบ 18:00
+
+                    if use_video_line:
+                        vid_path = self.ai_video.generate_for_post(
+                            topic=line_content.topic, niche=line_niche,
+                            content_text=line_content.line_message, mode="reel",
+                        )
+                        if vid_path:
+                            # video → upload + ใช้ first frame เป็น preview
+                            line_media_url = upload_media(vid_path)
+                            # preview = upload first frame screenshot
+                            preview_img = self._extract_video_thumbnail(vid_path)
+                            if preview_img:
+                                line_preview_url = upload_media(preview_img)
+                            line_media_type = "video"
+
+                    if not line_media_url and self.ai_image:
+                        img_path = self.ai_image.generate_for_post(
+                            topic=line_content.topic, niche=line_niche,
+                            content_summary=line_content.line_message,
+                        )
+                        if img_path:
+                            line_media_url = upload_media(img_path)
+                            line_media_type = "image"
+                except Exception as e:
+                    logger.warning(f"LINE media gen failed: {e}")
+
+                try:
+                    line_text = (f"{line_content.line_message}\n\n"
+                                  + " ".join(line_content.hashtags or []))
+                    if line_media_url:
+                        data = self.line.broadcast_with_media(
+                            text=line_text,
+                            media_url=line_media_url,
+                            media_type=line_media_type,
+                            preview_url=line_preview_url,
+                        )
+                    else:
+                        data = self.line.broadcast_flex(line_content)
                     result.results.append(data)
                     st.update_line_status("success")
-                    logger.info("[OK] LINE Broadcast — สำเร็จ")
+                    logger.info(f"[OK] LINE Broadcast — {line_media_type or 'flex'}")
                 except Exception as e:
                     err = str(e)
                     result.errors.append(f"LINE: {err}")
@@ -311,6 +357,24 @@ class AutoPosterWorkflow:
         if "error" in j:
             raise Exception(j["error"].get("message", str(j["error"])))
         return j.get("post_id") or j.get("id", "")
+
+    def _extract_video_thumbnail(self, video_path: str) -> str:
+        """ดึง frame แรกของ video เป็นรูป JPG → คืน path"""
+        try:
+            import imageio.v2 as imageio
+            from PIL import Image
+            import tempfile, time
+            reader = imageio.get_reader(video_path)
+            frame = reader.get_data(0)
+            reader.close()
+            img = Image.fromarray(frame)
+            if img.mode != "RGB": img = img.convert("RGB")
+            out = str(Path(tempfile.gettempdir()) / f"thumb_{int(time.time()*1000)}.jpg")
+            img.save(out, "JPEG", quality=85)
+            return out
+        except Exception as e:
+            logger.warning(f"thumbnail extract failed: {e}")
+            return None
 
     def _fb_post_video(self, page_id: str, token: str, description: str, video_path: str) -> str:
         """อัปโหลด video → Facebook Page"""
