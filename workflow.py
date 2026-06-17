@@ -209,7 +209,20 @@ class AutoPosterWorkflow:
                 st.set_stage("tiktok")
                 st.set_tiktok_preview(content.tiktok_script)
                 try:
-                    if video_path:
+                    tt_video = None
+                    # 1) ลอง AI video ก่อน (Reel 9:16 ใช้ได้ทุกรอบ)
+                    if self.ai_video:
+                        try:
+                            tt_video = self.ai_video.generate_for_post(
+                                topic=content.topic, niche=self.config.content_niche,
+                                content_text=content.tiktok_script or content.topic, mode="reel",
+                            )
+                        except Exception as e:
+                            logger.warning(f"TikTok AI video failed: {e}")
+
+                    if tt_video:
+                        data = self.tiktok.upload_video(content, tt_video)
+                    elif video_path:
                         data = self.tiktok.upload_video(content, video_path)
                     elif self.image_finder:
                         query = self.generator.get_image_query(content.topic, self.config.content_niche)
@@ -217,9 +230,9 @@ class AutoPosterWorkflow:
                         if image_urls:
                             data = self.tiktok.post_photo_mode(content, image_urls)
                         else:
-                            raise Exception("ไม่พบรูป Pexels")
+                            raise Exception("ไม่พบ video/รูป")
                     else:
-                        raise Exception("ไม่มี image_finder")
+                        raise Exception("ไม่มี video หรือ image_finder")
                     result.results.append(data)
                     st.update_tiktok_status("success")
                     logger.info("[OK] TikTok — สำเร็จ")
