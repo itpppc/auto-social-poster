@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ton.AI Auto Poster — Live Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sora:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #060912;
+    --card: #0e1424;
+    --card-2: #131a2d;
+    --card-3: #1a2340;
+    --border: rgba(99,102,241,0.12);
+    --border-strong: rgba(99,102,241,0.3);
+    --accent: #6366f1;
+    --accent-2: #8b5cf6;
+    --cyan: #06b6d4;
+    --green: #10b981;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --pink: #ec4899;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --muted: #64748b;
+    --fb: #1877f2;
+    --line: #06c755;
+    --tiktok: #ff0050;
+    --grad-1: linear-gradient(135deg,#6366f1,#8b5cf6);
+    --grad-2: linear-gradient(135deg,#06b6d4,#3b82f6);
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; }
+  body {
+    background-image:
+      radial-gradient(at 12% 0%, rgba(99,102,241,0.08) 0px, transparent 50%),
+      radial-gradient(at 88% 0%, rgba(139,92,246,0.06) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, rgba(6,182,212,0.04) 0px, transparent 50%);
+    min-height: 100vh;
+  }
+  .icon { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+
+  /* ───── HEADER ───── */
+  header {
+    background: rgba(6,9,18,0.85); backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand-logo {
+    width: 44px; height: 44px; border-radius: 12px; background: var(--grad-1);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Sora'; font-weight: 800; font-size: 20px; color: white;
+    box-shadow: 0 8px 24px rgba(99,102,241,0.4);
+  }
+  .brand-title { font-family: 'Sora'; font-size: 19px; font-weight: 700; }
+  .brand-title .grad { background: var(--grad-1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .brand-sub { font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .status-chip {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px; border-radius: 50px;
+    background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25);
+    font-size: 12px; font-weight: 600; color: var(--green);
+  }
+  .pulse-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.3)} }
+
+  .container { max-width: 1480px; margin: 0 auto; padding: 24px 28px; }
+
+  /* ───── HERO: COUNTDOWN + TRIGGER ───── */
+  .hero-grid { display: grid; grid-template-columns: 320px 1fr 220px; gap: 16px; margin-bottom: 20px; }
+  @media (max-width: 1100px) { .hero-grid { grid-template-columns: 1fr; } }
+
+  .cd-card {
+    background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(139,92,246,0.10) 50%, rgba(6,182,212,0.10));
+    border: 1px solid rgba(99,102,241,0.3); border-radius: 18px;
+    padding: 20px 22px; position: relative; overflow: hidden;
+  }
+  .cd-card::after {
+    content: ''; position: absolute; top: -20px; right: -20px; width: 100px; height: 100px;
+    border-radius: 50%; background: var(--accent); opacity: 0.15; filter: blur(20px);
+  }
+  .cd-cap { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; font-weight: 700; }
+  .cd-time { font-family: 'Sora'; font-size: 44px; font-weight: 800; line-height: 1;
+    background: linear-gradient(90deg, #a5b4fc, #c4b5fd, #67e8f9);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-variant-numeric: tabular-nums; margin: 6px 0 4px; letter-spacing: -1.5px;
+  }
+  .cd-next { font-size: 13px; color: var(--text-dim); }
+  .cd-slots { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-top: 14px; }
+  .cd-slot {
+    background: rgba(99,102,241,0.08); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 4px; text-align: center;
+  }
+  .cd-slot.next { background: rgba(6,182,212,0.15); border-color: var(--cyan); box-shadow: 0 0 12px rgba(6,182,212,0.3); }
+  .cd-slot.done { opacity: 0.4; }
+  .cd-slot-t { font-family: 'Sora'; font-size: 13px; font-weight: 700; }
+  .cd-slot-s { font-size: 9px; color: var(--muted); margin-top: 1px; }
+  .cd-slot.next .cd-slot-s { color: var(--cyan); font-weight: 700; }
+  .cd-slot.done .cd-slot-s { color: var(--green); }
+
+  /* CURRENT STATUS BIG */
+  .stat-now {
+    background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    padding: 20px 22px; display: flex; flex-direction: column; justify-content: center;
+    min-height: 100%;
+  }
+  .stat-now-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; margin-bottom: 8px; }
+  .stat-now-stage { font-family: 'Sora'; font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+  .stage-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); }
+  .stage-dot.active { background: var(--cyan); box-shadow: 0 0 12px var(--cyan); animation: pulse 1.4s infinite; }
+  .stage-dot.success { background: var(--green); box-shadow: 0 0 12px var(--green); }
+  .stage-dot.idle { background: var(--muted); }
+  .stat-now-topic { font-size: 13px; color: var(--text-dim); margin-top: 10px; line-height: 1.5; max-height: 40px; overflow: hidden; }
+
+  /* TRIGGER BUTTONS */
+  .trigger-box {
+    background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    padding: 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .btn-trigger {
+    width: 100%; padding: 12px 14px; border-radius: 10px; border: none; cursor: pointer;
+    font-family: 'Inter'; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.2s;
+  }
+  .btn-preview { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
+  .btn-preview:hover { background: rgba(245,158,11,0.25); }
+  .btn-post { background: var(--grad-1); color: white; box-shadow: 0 8px 24px rgba(99,102,241,0.3); }
+  .btn-post:hover { transform: translateY(-1px); box-shadow: 0 12px 32px rgba(99,102,241,0.4); }
+  .btn-trigger:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* ───── PANEL ───── */
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+  .panel-head { padding: 14px 22px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-family: 'Sora'; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+  .panel-title-ic { width: 30px; height: 30px; border-radius: 9px; background: rgba(99,102,241,0.12); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; }
+  .panel-body { padding: 20px 22px; }
+
+  /* ═════════ FLOW DIAGRAM (n8n style) ═════════ */
+  .flow-wrap {
+    background: radial-gradient(circle at center, rgba(99,102,241,0.05), transparent 70%);
+    padding: 30px 24px;
+    position: relative;
+    overflow-x: auto;
+    min-height: 280px;
+  }
+  .flow-svg { width: 100%; min-width: 900px; height: 240px; display: block; }
+  .flow-node-rect {
+    fill: var(--card-2); stroke: rgba(99,102,241,0.25); stroke-width: 1.5;
+    transition: all 0.3s;
+  }
+  .flow-node.active .flow-node-rect { stroke: var(--cyan); stroke-width: 2.5;
+    filter: drop-shadow(0 0 12px rgba(6,182,212,0.5)); animation: nodePulse 1.4s infinite; }
+  .flow-node.success .flow-node-rect { stroke: var(--green); stroke-width: 2;
+    filter: drop-shadow(0 0 8px rgba(16,185,129,0.4)); }
+  .flow-node.failed .flow-node-rect { stroke: var(--red); stroke-width: 2;
+    filter: drop-shadow(0 0 8px rgba(239,68,68,0.5)); }
+  .flow-node.pending .flow-node-rect { stroke: var(--muted); stroke-dasharray: 4 4; }
+  @keyframes nodePulse {
+    0%, 100% { filter: drop-shadow(0 0 8px rgba(6,182,212,0.5)); }
+    50% { filter: drop-shadow(0 0 20px rgba(6,182,212,0.9)); }
+  }
+  .flow-node-icon-bg { transition: all 0.3s; }
+  .flow-node-label {
+    fill: var(--text); font-size: 11px; font-weight: 600; font-family: 'Inter', sans-serif;
+  }
+  .flow-node-sub {
+    fill: var(--text-dim); font-size: 9px; font-family: 'Inter', sans-serif;
+  }
+  .flow-node-status {
+    font-size: 9px; font-weight: 700; font-family: 'Inter', sans-serif;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .flow-edge {
+    stroke: rgba(99,102,241,0.25); stroke-width: 2; fill: none;
+    transition: all 0.3s;
+  }
+  .flow-edge.active { stroke: var(--cyan); stroke-width: 2.5;
+    stroke-dasharray: 6 4; animation: dashFlow 0.8s linear infinite;
+  }
+  .flow-edge.success { stroke: var(--green); stroke-width: 2; }
+  .flow-edge.failed { stroke: var(--red); stroke-width: 2; opacity: 0.6; }
+  @keyframes dashFlow { to { stroke-dashoffset: -20; } }
+
+  .flow-badge {
+    position: absolute; top: 16px; right: 24px;
+    padding: 6px 14px; border-radius: 50px; font-size: 11px; font-weight: 700;
+    background: rgba(99,102,241,0.12); color: #a5b4fc;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  /* ───── CONTENT PREVIEW CARDS ───── */
+  .preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; margin-top: 20px; }
+  .prev-card {
+    background: var(--card-2); border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; transition: all 0.3s;
+  }
+  .prev-card.active { border-color: var(--cyan); box-shadow: 0 0 24px rgba(6,182,212,0.2); }
+  .prev-card.success { border-color: var(--green); }
+  .prev-card.failed { border-color: var(--red); }
+  .prev-head {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .prev-ic { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .prev-ic.fb { background: rgba(24,119,242,0.15); color: var(--fb); }
+  .prev-ic.line { background: rgba(6,199,85,0.15); color: var(--line); }
+  .prev-ic.tt { background: rgba(255,0,80,0.15); color: var(--tiktok); }
+  .prev-info { flex: 1; min-width: 0; }
+  .prev-title { font-size: 13px; font-weight: 700; }
+  .prev-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .prev-status {
+    font-size: 10px; font-weight: 700; padding: 4px 9px; border-radius: 6px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .ps-pending { background: rgba(100,116,139,0.15); color: var(--muted); }
+  .ps-active { background: rgba(6,182,212,0.15); color: var(--cyan); }
+  .ps-success { background: rgba(16,185,129,0.15); color: var(--green); }
+  .ps-failed { background: rgba(239,68,68,0.15); color: var(--red); }
+  .prev-body {
+    padding: 14px 16px; font-size: 12px; line-height: 1.6; color: var(--text-dim);
+    white-space: pre-wrap; max-height: 220px; overflow-y: auto;
+  }
+  .prev-error {
+    margin: 0 16px 14px; padding: 10px 12px; background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.25); border-radius: 8px; color: #fca5a5;
+    font-size: 11px; font-family: 'JetBrains Mono', monospace; line-height: 1.5; word-break: break-all;
+  }
+
+  /* ───── STATS BAR ───── */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr)); gap: 14px; margin: 20px 0; }
+  .mini-stat {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 16px 18px; display: flex; align-items: center; gap: 14px;
+    transition: all 0.3s;
+  }
+  .mini-stat:hover { transform: translateY(-2px); border-color: var(--border-strong); }
+  .mini-stat-ic { width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .mini-stat-info { flex: 1; min-width: 0; }
+  .mini-stat-val { font-family: 'Sora'; font-size: 22px; font-weight: 700; line-height: 1; }
+  .mini-stat-lbl { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-top: 4px; }
+
+  /* ───── LIVE LOG ───── */
+  .log-box {
+    background: #050810; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; height: 200px; overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.7;
+  }
+  .log-ts { color: var(--muted); margin-right: 8px; font-size: 10px; }
+  .log-li { color: #94a3b8; }
+  .log-ls { color: var(--green); }
+  .log-le { color: var(--red); }
+  .log-lw { color: var(--yellow); }
+
+  /* ───── HASHTAG CHIP ───── */
+  .hashtags { padding: 0 16px 14px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .htag { font-size: 10px; padding: 3px 8px; border-radius: 50px;
+    background: rgba(99,102,241,0.1); color: #a5b4fc; font-weight: 500; }
+
+  /* ───── RECENT POSTS TABLE ───── */
+  .ptbl { width: 100%; border-collapse: collapse; }
+  .ptbl th { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700;
+    padding: 12px 22px; text-align: left; border-bottom: 1px solid var(--border); }
+  .ptbl td { padding: 12px 22px; border-bottom: 1px solid rgba(99,102,241,0.06); font-size: 13px; vertical-align: middle; }
+  .ptbl tbody tr { transition: background 0.2s; cursor: pointer; }
+  .ptbl tbody tr:hover { background: rgba(99,102,241,0.04); }
+  .topic-text { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px;
+    font-size: 10px; font-weight: 600; border: 1px solid; margin-right: 4px; }
+  .chip-fb { background: rgba(24,119,242,0.12); color: #60a5fa; border-color: rgba(24,119,242,0.3); }
+  .chip-line { background: rgba(6,199,85,0.12); color: #34d399; border-color: rgba(6,199,85,0.3); }
+  .chip-tt { background: rgba(255,0,80,0.12); color: #fb7185; border-color: rgba(255,0,80,0.3); }
+
+  .empty { text-align: center; padding: 40px; color: var(--muted); font-size: 12px; }
+  .btn-small { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); color: #a5b4fc;
+    padding: 6px 12px; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .btn-small:hover { background: rgba(99,102,241,0.18); }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.2); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,0.35); }
+
+  footer { text-align: center; padding: 24px; color: var(--muted); font-size: 11px; }
+  .badge-soft { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: rgba(99,102,241,0.12); color: #a5b4fc; font-weight: 600; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--card); border: 1px solid var(--border-strong);
+    padding: 12px 18px; border-radius: 12px; font-size: 13px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+    transform: translateY(100px); opacity: 0; transition: all 0.3s;
+    z-index: 1000;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- ════ ICON DEFS ════ -->
+<svg width="0" height="0" style="position:absolute">
+<defs>
+  <symbol id="ic-fb" viewBox="0 0 24 24"><path fill="currentColor" d="M9.2 21.5h4v-8h3.6l.4-4h-4V7.5a1 1 0 0 1 1-1h3v-4h-3a5 5 0 0 0-5 5v2h-2l-.4 4h2.4v8z"/></symbol>
+  <symbol id="ic-line" viewBox="0 0 24 24"><path fill="currentColor" d="M19.4 9.9c.3 0 .6.3.6.6s-.3.6-.6.6h-1.8v1.1h1.8c.3 0 .6.3.6.6s-.3.6-.6.6h-2.4c-.3 0-.6-.3-.6-.6V8.1c0-.3.3-.6.6-.6h2.4c.3 0 .6.3.6.6s-.3.6-.6.6h-1.8v1.1h1.8zm-3.9 3c0 .3-.2.5-.4.6h-.2c-.2 0-.4-.1-.5-.3l-2.4-3.3v2.9c0 .3-.3.6-.6.6s-.6-.3-.6-.6V8.1c0-.3.2-.5.4-.6h.2c.2 0 .4.1.5.3l2.5 3.3V8.1c0-.3.3-.6.6-.6s.6.3.6.6v4.8zm-5.7 0c0 .3-.3.6-.6.6s-.6-.3-.6-.6V8.1c0-.3.3-.6.6-.6s.6.3.6.6v4.8zm-2.5.6H4.9c-.3 0-.6-.3-.6-.6V8.1c0-.3.3-.6.6-.6s.6.3.6.6v4.1h1.8c.3 0 .6.3.6.6s-.3.6-.6.6M24 10.3c0-5.4-5.4-9.7-12-9.7S0 5 0 10.3c0 4.8 4.3 8.8 10 9.6.4.1.9.3 1.1.6.1.3.1.8 0 1.1l-.2 1c0 .3-.2 1.2 1.1.6 1.3-.5 6.9-4.1 9.4-7C23.2 14.4 24 12.5 24 10.3"/></symbol>
+  <symbol id="ic-tt" viewBox="0 0 24 24"><path fill="currentColor" d="M19.6 6.7a4.8 4.8 0 0 1-3.8-4.2V2h-3.4v13.7a2.9 2.9 0 0 1-5.2 1.7 2.9 2.9 0 0 1 3.2-4.5v-3.5a6.3 6.3 0 0 0-5.4 10.7 6.3 6.3 0 0 0 10.9-4.4V8.7a8.2 8.2 0 0 0 4.8 1.5V6.8a4.8 4.8 0 0 1-1-.1z"/></symbol>
+  <symbol id="ic-ai" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.2L19.5 8 12 11.8 4.5 8 12 4.2zM4 9.6l7 3.5v7l-7-3.5v-7zm9 10.5v-7l7-3.5v7l-7 3.5z"/></symbol>
+  <symbol id="ic-img" viewBox="0 0 24 24"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3L14.5 12l4.5 6H5l3.5-4.5z"/></symbol>
+  <symbol id="ic-clock" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.3 3.2.7-1.2-4.5-2.7V7z"/></symbol>
+  <symbol id="ic-bolt" viewBox="0 0 24 24"><path fill="currentColor" d="M7 2v11h3v9l7-12h-4l3-8z"/></symbol>
+  <symbol id="ic-eye" viewBox="0 0 24 24"><path fill="currentColor" d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5c-1.7-4.4-6-7.5-11-7.5zm0 12.5c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5zm0-8c-1.7 0-3 1.3-3 3s1.3 3 3 3 3-1.3 3-3-1.3-3-3-3z"/></symbol>
+  <symbol id="ic-send" viewBox="0 0 24 24"><path fill="currentColor" d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></symbol>
+  <symbol id="ic-chart" viewBox="0 0 24 24"><path fill="currentColor" d="M3 13h2v8H3v-8zm4-7h2v15H7V6zm4 3h2v12h-2V9zm4-5h2v17h-2V4zm4 8h2v9h-2v-9z"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></symbol>
+  <symbol id="ic-x" viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.4L17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></symbol>
+  <symbol id="ic-rss" viewBox="0 0 24 24"><path fill="currentColor" d="M6.18 15.64a2.18 2.18 0 0 1 2.18 2.18C8.36 19 7.38 20 6.18 20A2.18 2.18 0 0 1 4 17.82a2.18 2.18 0 0 1 2.18-2.18M4 4.44A15.56 15.56 0 0 1 19.56 20h-2.83A12.73 12.73 0 0 0 4 7.27V4.44m0 5.66a9.9 9.9 0 0 1 9.9 9.9h-2.83A7.07 7.07 0 0 0 4 12.93V10.1z"/></symbol>
+  <symbol id="ic-refresh" viewBox="0 0 24 24"><path fill="currentColor" d="M17.6 6.4C16.2 4.9 14.2 4 12 4c-4.4 0-8 3.6-8 8s3.6 8 8 8c3.7 0 6.8-2.6 7.7-6h-2.1c-.8 2.3-3 4-5.6 4-3.3 0-6-2.7-6-6s2.7-6 6-6c1.7 0 3.1.7 4.2 1.8L13 11h7V4l-2.4 2.4z"/></symbol>
+  <symbol id="ic-spark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2L9.9 8.8 3 11l6.9 2.2L12 20l2.1-6.8L21 11l-6.9-2.2z"/></symbol>
+</defs>
+</svg>
+
+<!-- ════ HEADER ════ -->
+<header>
+  <div class="brand">
+    <div class="brand-logo">T</div>
+    <div>
+      <div class="brand-title"><span class="grad">Ton.AI</span> Auto Poster</div>
+      <div class="brand-sub">LIVE DASHBOARD · v3.0 · n8n-style flow</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-chip"><div class="pulse-dot"></div> <span id="serviceLbl">Service Active</span></div>
+    <span class="badge-soft" id="lastSync">—</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ════ HERO ════ -->
+  <div class="hero-grid">
+    <!-- COUNTDOWN -->
+    <div class="cd-card">
+      <div class="cd-cap">⏰ โพสต์ถัดไปใน</div>
+      <div class="cd-time" id="cdTime">--:--:--</div>
+      <div class="cd-next" id="cdNext">กำลังคำนวณ...</div>
+      <div class="cd-slots" id="cdSlots"></div>
+    </div>
+
+    <!-- CURRENT STAGE -->
+    <div class="stat-now">
+      <div class="stat-now-label">⚡ Current Status</div>
+      <div class="stat-now-stage">
+        <span class="stage-dot idle" id="stageDot"></span>
+        <span id="stageText">Idle — รอ schedule ถัดไป</span>
+      </div>
+      <div class="stat-now-topic" id="currentTopic">ยังไม่มีหัวข้อ — กดปุ่ม "Preview" เพื่อทดลองสร้าง content</div>
+    </div>
+
+    <!-- TRIGGER -->
+    <div class="trigger-box">
+      <button class="btn-trigger btn-preview" id="btnPreview" onclick="triggerPreview()">
+        <svg class="icon" width="16" height="16"><use href="#ic-eye"/></svg> Preview Content
+      </button>
+      <button class="btn-trigger btn-post" id="btnPost" onclick="triggerPostNow()">
+        <svg class="icon" width="16" height="16"><use href="#ic-send"/></svg> Post Now
+      </button>
+    </div>
+  </div>
+
+  <!-- ════ N8N FLOW DIAGRAM ════ -->
+  <div class="panel" style="margin-bottom: 20px">
+    <div class="panel-head">
+      <div class="panel-title">
+        <div class="panel-title-ic"><svg class="icon" width="16" height="16"><use href="#ic-bolt"/></svg></div>
+        Workflow Flow
+      </div>
+      <span class="badge-soft" id="flowBadge">⚪ Idle</span>
+    </div>
+    <div class="flow-wrap">
+      <svg class="flow-svg" id="flowSvg" viewBox="0 0 1100 240" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+  </div>
+
+  <!-- ════ CONTENT PREVIEW ════ -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-title">
+        <div class="panel-title-ic" style="background:rgba(245,158,11,0.12);color:#fbbf24"><svg class="icon" width="16" height="16"><use href="#ic-eye"/></svg></div>
+        Content Preview
+      </div>
+      <span class="badge-soft" id="previewSource">—</span>
+    </div>
+    <div class="panel-body" style="padding:16px 22px">
+      <div id="previewGrid" class="preview-grid">
+        <div class="empty">กด "Preview Content" เพื่อสร้าง content ตัวอย่าง (ไม่โพสต์จริง)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ STATS ════ -->
+  <div class="stats-row">
+    <div class="mini-stat">
+      <div class="mini-stat-ic" style="background:rgba(99,102,241,0.12);color:var(--accent)"><svg class="icon" width="20" height="20"><use href="#ic-chart"/></svg></div>
+      <div class="mini-stat-info"><div class="mini-stat-val" id="s_total">—</div><div class="mini-stat-lbl">Total Posts</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-ic" style="background:rgba(16,185,129,0.12);color:var(--green)"><svg class="icon" width="20" height="20"><use href="#ic-check"/></svg></div>
+      <div class="mini-stat-info"><div class="mini-stat-val" style="color:var(--green)" id="s_rate">—</div><div class="mini-stat-lbl">Success Rate</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-ic" style="background:rgba(6,182,212,0.12);color:var(--cyan)"><svg class="icon" width="20" height="20"><use href="#ic-clock"/></svg></div>
+      <div class="mini-stat-info"><div class="mini-stat-val" style="color:var(--cyan)" id="s_today">—</div><div class="mini-stat-lbl">วันนี้</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-ic" style="background:rgba(24,119,242,0.12);color:var(--fb)"><svg class="icon" width="20" height="20"><use href="#ic-fb"/></svg></div>
+      <div class="mini-stat-info"><div class="mini-stat-val" style="color:#60a5fa" id="s_fb">—</div><div class="mini-stat-lbl">Facebook</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-ic" style="background:rgba(6,199,85,0.12);color:var(--line)"><svg class="icon" width="20" height="20"><use href="#ic-line"/></svg></div>
+      <div class="mini-stat-info"><div class="mini-stat-val" style="color:#34d399" id="s_line">—</div><div class="mini-stat-lbl">LINE</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-stat-ic" style="background:rgba(255,0,80,0.12);color:var(--tiktok)"><svg class="icon" width="20" height="20"><use href="#ic-tt"/></svg></div>
+      <div class="mini-stat-info"><div class="mini-stat-val" style="color:#fb7185" id="s_tt">—</div><div class="mini-stat-lbl">TikTok</div></div>
+    </div>
+  </div>
+
+  <!-- ════ RECENT + LOG ════ -->
+  <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:16px">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-ic"><svg class="icon" width="16" height="16"><use href="#ic-clock"/></svg></div>
+          Recent Posts <span class="badge-soft" id="recentCnt">0</span>
+        </div>
+      </div>
+      <div style="padding:0">
+        <table class="ptbl">
+          <thead><tr><th style="width:100px">เวลา</th><th>หัวข้อ</th><th style="width:180px">Platforms</th></tr></thead>
+          <tbody id="postsBody"><tr><td colspan="3"><div class="empty">โหลด...</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">
+          <div class="panel-title-ic" style="background:rgba(245,158,11,0.12);color:#fbbf24"><svg class="icon" width="16" height="16"><use href="#ic-bolt"/></svg></div>
+          Live Activity Log
+        </div>
+        <button class="btn-small" onclick="loadLog()"><svg class="icon" width="11" height="11"><use href="#ic-refresh"/></svg></button>
+      </div>
+      <div class="panel-body">
+        <div class="log-box" id="logBox"><div class="log-li">โหลด...</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>© 2026 Ton.AI · Live Auto Poster Dashboard · โพสต์อัตโนมัติทุก 2 ชั่วโมง (8 รอบ/วัน)</footer>
+
+<!-- TOAST -->
+<div class="toast" id="toast">—</div>
+
+<script>
+const TIMES = ["08:00","10:00","12:00","14:00","16:00","18:00","20:00","22:00"];
+const API   = window.location.origin;
+
+const esc = s => !s ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+// ═══════════════ COUNTDOWN ═══════════════
+function getNext() {
+  const now = new Date();
+  let next = null;
+  for (const t of TIMES) {
+    const [h,m] = t.split(":").map(Number);
+    const d = new Date(now); d.setHours(h,m,0,0);
+    if (d > now && (!next || d < next.date)) next = {label:t, date:d};
+  }
+  if (!next) {
+    const [h,m] = TIMES[0].split(":").map(Number);
+    const d = new Date(now); d.setDate(d.getDate()+1); d.setHours(h,m,0,0);
+    next = {label:TIMES[0], date:d, tomorrow:true};
+  }
+  return next;
+}
+function tick() {
+  const now = new Date(), next = getNext();
+  const diff = Math.max(0, next.date - now);
+  const h = String(Math.floor(diff/3600000)).padStart(2,"0");
+  const m = String(Math.floor(diff%3600000/60000)).padStart(2,"0");
+  const s = String(Math.floor(diff%60000/1000)).padStart(2,"0");
+  document.getElementById("cdTime").textContent = `${h}:${m}:${s}`;
+  document.getElementById("cdNext").textContent = `รอบ ${next.label} น.${next.tomorrow?" (พรุ่งนี้)":""}`;
+
+  const slots = document.getElementById("cdSlots");
+  if (slots.children.length !== TIMES.length) {
+    slots.innerHTML = TIMES.map(t => `<div class="cd-slot"><div class="cd-slot-t">${t}</div><div class="cd-slot-s">—</div></div>`).join("");
+  }
+  TIMES.forEach((t,i) => {
+    const [th,tm] = t.split(":").map(Number);
+    const sd = new Date(now); sd.setHours(th,tm,0,0);
+    const slot = slots.children[i];
+    slot.className = "cd-slot";
+    const sub = slot.querySelector(".cd-slot-s");
+    if (sd <= now) { slot.classList.add("done"); sub.textContent = "✓"; }
+    else if (t === next.label) { slot.classList.add("next"); sub.textContent = "Next"; }
+    else { sub.textContent = "—"; }
+  });
+}
+setInterval(tick, 1000); tick();
+
+// ═══════════════ FLOW DIAGRAM ═══════════════
+// Layout: [Trigger] → [AI Gen] → [Image] ──┬→ [FB Pages]
+//                                          ├→ [LINE]
+//                                          └→ [TikTok]
+const FLOW_NODES = [
+  { id: "trigger",  label: "Trigger",      sub: "Schedule",     x: 40,   y: 100, icon: "ic-bolt",  color: "#f59e0b" },
+  { id: "ai",       label: "AI Generate",  sub: "Gemini",       x: 230,  y: 100, icon: "ic-ai",    color: "#8b5cf6" },
+  { id: "image",    label: "Image Finder", sub: "Pexels",       x: 420,  y: 100, icon: "ic-img",   color: "#06b6d4" },
+  { id: "facebook", label: "Facebook",     sub: "Multi-Page",   x: 720,  y: 30,  icon: "ic-fb",    color: "#1877f2" },
+  { id: "line",     label: "LINE",         sub: "Broadcast",    x: 720,  y: 100, icon: "ic-line",  color: "#06c755" },
+  { id: "tiktok",   label: "TikTok",       sub: "Video",        x: 720,  y: 170, icon: "ic-tt",    color: "#ff0050" },
+];
+
+const FLOW_EDGES = [
+  { from: "trigger",  to: "ai" },
+  { from: "ai",       to: "image" },
+  { from: "image",    to: "facebook" },
+  { from: "image",    to: "line" },
+  { from: "image",    to: "tiktok" },
+];
+
+function renderFlow(states = {}) {
+  const svg = document.getElementById("flowSvg");
+  const W = 160, H = 64;
+
+  // build edges first (so they appear below nodes)
+  let html = "";
+  for (const e of FLOW_EDGES) {
+    const a = FLOW_NODES.find(n => n.id === e.from);
+    const b = FLOW_NODES.find(n => n.id === e.to);
+    const x1 = a.x + W, y1 = a.y + H/2;
+    const x2 = b.x,     y2 = b.y + H/2;
+    const mx = (x1 + x2) / 2;
+    const path = `M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`;
+    const st = states[e.to] || "idle";
+    let cls = "flow-edge";
+    if (st === "active")  cls += " active";
+    if (st === "success") cls += " success";
+    if (st === "failed")  cls += " failed";
+    html += `<path class="${cls}" d="${path}"/>`;
+  }
+
+  // nodes
+  for (const n of FLOW_NODES) {
+    const st = states[n.id] || "idle";
+    let cls = "flow-node " + st;
+    let badge = "";
+    if (st === "success") badge = `<g transform="translate(${n.x + W - 20}, ${n.y + 8})"><circle r="9" fill="var(--green)"/><svg x="-7" y="-7" width="14" height="14" viewBox="0 0 24 24"><path fill="white" d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></g>`;
+    else if (st === "failed") badge = `<g transform="translate(${n.x + W - 20}, ${n.y + 8})"><circle r="9" fill="var(--red)"/><svg x="-7" y="-7" width="14" height="14" viewBox="0 0 24 24"><path fill="white" d="M19 6.4L17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z"/></svg></g>`;
+    else if (st === "active") badge = `<circle cx="${n.x + W - 14}" cy="${n.y + 14}" r="6" fill="var(--cyan)"><animate attributeName="r" values="6;10;6" dur="1s" repeatCount="indefinite"/></circle>`;
+
+    html += `
+      <g class="${cls}" data-id="${n.id}">
+        <rect class="flow-node-rect" x="${n.x}" y="${n.y}" width="${W}" height="${H}" rx="12"/>
+        <rect class="flow-node-icon-bg" x="${n.x + 12}" y="${n.y + 14}" width="36" height="36" rx="10" fill="${n.color}" opacity="0.15"/>
+        <svg x="${n.x + 20}" y="${n.y + 22}" width="20" height="20"><use href="#${n.icon}" fill="${n.color}"/></svg>
+        <text class="flow-node-label" x="${n.x + 58}" y="${n.y + 28}">${n.label}</text>
+        <text class="flow-node-sub" x="${n.x + 58}" y="${n.y + 44}">${n.sub}</text>
+        ${badge}
+      </g>
+    `;
+  }
+
+  svg.innerHTML = html;
+}
+renderFlow();
+
+// ═══════════════ TRIGGER BUTTONS ═══════════════
+async function triggerPreview() {
+  showToast("🎨 กำลังสร้าง preview content...", "info");
+  document.getElementById("btnPreview").disabled = true;
+  document.getElementById("btnPost").disabled = true;
+  await fetch(`${API}/api/preview`, {method:"POST"});
+  pollStatus();
+}
+
+async function triggerPostNow() {
+  if (!confirm("⚠ ยืนยันโพสต์ทันทีไปทุก platform?")) return;
+  showToast("🚀 เริ่มโพสต์...", "info");
+  document.getElementById("btnPreview").disabled = true;
+  document.getElementById("btnPost").disabled = true;
+  await fetch(`${API}/api/post-now`, {method:"POST"});
+  pollStatus();
+}
+
+let pollTimer = null;
+function pollStatus() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(loadStatus, 1500);
+  loadStatus();
+}
+
+// ═══════════════ STATUS LOADER ═══════════════
+async function loadStatus() {
+  try {
+    const s = await fetch(`${API}/api/status`).then(r => r.json());
+
+    // Update stage dot + text
+    const dot = document.getElementById("stageDot");
+    const txt = document.getElementById("stageText");
+    const topic = document.getElementById("currentTopic");
+    const flowBadge = document.getElementById("flowBadge");
+
+    if (s.running) {
+      dot.className = "stage-dot active";
+      txt.textContent = `Running — ${stageLabel(s.stage)}`;
+      flowBadge.innerHTML = `🟢 Running (${esc(s.stage)})`;
+      flowBadge.style.background = "rgba(6,182,212,0.15)";
+      flowBadge.style.color = "var(--cyan)";
+    } else {
+      dot.className = "stage-dot " + (s.stage === "done" ? "success" : "idle");
+      txt.textContent = s.stage === "done" ? "Done ✓" : "Idle — รอ schedule ถัดไป";
+      flowBadge.innerHTML = s.stage === "done" ? "✅ Completed" : "⚪ Idle";
+      flowBadge.style.background = s.stage === "done" ? "rgba(16,185,129,0.15)" : "rgba(99,102,241,0.12)";
+      flowBadge.style.color = s.stage === "done" ? "var(--green)" : "#a5b4fc";
+
+      document.getElementById("btnPreview").disabled = false;
+      document.getElementById("btnPost").disabled = false;
+      if (pollTimer && s.stage !== "preview_ready") {
+        clearTimeout(pollTimer); pollTimer = null;
+        setTimeout(loadStatus, 2000); // one more refresh
+      }
+    }
+    topic.textContent = s.topic || "—";
+    document.getElementById("previewSource").textContent = s.source || "—";
+
+    // Flow node states
+    const states = {};
+    if (s.running || s.stage === "done") states.trigger = "success";
+    if (s.stage === "generating") states.ai = "active";
+    else if (s.topic) states.ai = "success";
+    if (["facebook","line","tiktok","done"].includes(s.stage) && s.preview?.facebook_pages?.length) states.image = "success";
+    else if (s.stage === "image_search") states.image = "active";
+
+    // facebook
+    const fb_pages = s.preview?.facebook_pages || [];
+    if (fb_pages.length) {
+      const statuses = fb_pages.map(p => p.status);
+      if (s.stage === "facebook") states.facebook = "active";
+      else if (statuses.every(x => x === "success")) states.facebook = "success";
+      else if (statuses.some(x => x === "failed")) states.facebook = "failed";
+      else if (statuses.some(x => x === "success")) states.facebook = "success";
+    }
+    // line
+    if (s.preview?.line?.status === "success") states.line = "success";
+    else if (s.preview?.line?.status === "failed") states.line = "failed";
+    else if (s.stage === "line") states.line = "active";
+    // tiktok
+    if (s.preview?.tiktok?.status === "success") states.tiktok = "success";
+    else if (s.preview?.tiktok?.status === "failed") states.tiktok = "failed";
+    else if (s.stage === "tiktok") states.tiktok = "active";
+
+    renderFlow(states);
+    renderPreview(s);
+    renderActivityLog(s.log || []);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function stageLabel(s) {
+  return {
+    idle: "Idle", generating: "AI Generate", image_search: "Find Image",
+    facebook: "Post Facebook", line: "Broadcast LINE", tiktok: "Upload TikTok",
+    preview_ready: "Preview Ready", done: "Done"
+  }[s] || s;
+}
+
+// ═══════════════ PREVIEW CARDS ═══════════════
+function renderPreview(s) {
+  const grid = document.getElementById("previewGrid");
+  const cards = [];
+
+  for (const pg of (s.preview?.facebook_pages || [])) {
+    cards.push(buildCard("fb", "Facebook", pg.page_name || "Page", pg.text, pg.status, pg.error, pg.hashtags));
+  }
+  if (s.preview?.line?.text) {
+    cards.push(buildCard("line", "LINE Broadcast", "Official Account", s.preview.line.text, s.preview.line.status, s.preview.line.error));
+  }
+  if (s.preview?.tiktok?.text) {
+    cards.push(buildCard("tt", "TikTok", "@ton.ai.40", s.preview.tiktok.text, s.preview.tiktok.status, s.preview.tiktok.error));
+  }
+
+  if (cards.length === 0) {
+    grid.innerHTML = `<div class="empty">กด "Preview Content" เพื่อสร้าง content ตัวอย่าง (ไม่โพสต์จริง)</div>`;
+  } else {
+    grid.innerHTML = cards.join("");
+  }
+}
+
+const ICON_MAP = { fb: "ic-fb", line: "ic-line", tt: "ic-tt" };
+function buildCard(type, title, sub, text, status = "pending", error = "", hashtags = []) {
+  const stClass = status === "success" ? "success" : status === "failed" ? "failed" : status === "active" ? "active" : "";
+  const stPill = status === "success" ? "ps-success" : status === "failed" ? "ps-failed" : status === "active" ? "ps-active" : "ps-pending";
+  const stLabel = status === "success" ? "✓ Posted" : status === "failed" ? "✗ Failed" : status === "active" ? "● Posting" : "○ Pending";
+  return `
+    <div class="prev-card ${stClass}">
+      <div class="prev-head">
+        <div class="prev-ic ${type}"><svg class="icon" width="18" height="18"><use href="#${ICON_MAP[type]}"/></svg></div>
+        <div class="prev-info">
+          <div class="prev-title">${esc(title)}</div>
+          <div class="prev-meta">${esc(sub)}</div>
+        </div>
+        <span class="prev-status ${stPill}">${stLabel}</span>
+      </div>
+      <div class="prev-body">${esc(text)}</div>
+      ${error ? `<div class="prev-error">${esc(error)}</div>` : ""}
+      ${hashtags?.length ? `<div class="hashtags">${hashtags.map(h => `<span class="htag">${esc(h)}</span>`).join("")}</div>` : ""}
+    </div>
+  `;
+}
+
+// ═══════════════ ACTIVITY LOG (from status_tracker) ═══════════════
+function renderActivityLog(log) {
+  // optionally show in log box (currently shows service.log instead)
+}
+
+// ═══════════════ TOAST ═══════════════
+function showToast(msg, type = "info") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast show " + (type !== "info" ? type : "");
+  setTimeout(() => t.classList.remove("show"), 3000);
+}
+
+// ═══════════════ MAIN STATS ═══════════════
+async function loadStats() {
+  try {
+    const d = await fetch(`${API}/api/stats`).then(r => r.json());
+    document.getElementById("s_total").textContent = d.total_runs ?? 0;
+    document.getElementById("s_rate").textContent  = (d.success_rate ?? 0) + "%";
+    document.getElementById("s_today").textContent = d.today_runs ?? 0;
+    document.getElementById("s_fb").textContent    = d.fb_posts ?? 0;
+    document.getElementById("s_line").textContent  = d.line_posts ?? 0;
+    document.getElementById("s_tt").textContent    = d.tiktok_posts ?? 0;
+    document.getElementById("recentCnt").textContent = d.total_runs ?? 0;
+
+    // Recent posts
+    const tb = document.getElementById("postsBody");
+    if (!d.recent?.length) {
+      tb.innerHTML = `<tr><td colspan="3"><div class="empty">ไม่มีประวัติ</div></td></tr>`;
+    } else {
+      tb.innerHTML = d.recent.slice(0, 12).map(r => {
+        const chips = (r.platforms || []).map(p => {
+          if (p.platform === "facebook") return `<span class="chip chip-fb">FB · ${esc(p.page_name || '')}</span>`;
+          if (p.platform === "line") return `<span class="chip chip-line">LINE</span>`;
+          if (p.platform === "tiktok") return `<span class="chip chip-tt">TikTok</span>`;
+        }).join("");
+        return `<tr><td>${esc(r.time)}</td><td><div class="topic-text" title="${esc(r.topic)}">${esc(r.topic)}</div></td><td>${chips || '<span style="color:var(--muted)">—</span>'}</td></tr>`;
+      }).join("");
+    }
+    document.getElementById("lastSync").textContent = "✓ " + new Date().toLocaleTimeString("th-TH");
+  } catch (e) {}
+}
+
+async function loadLog() {
+  try {
+    const lines = await fetch(`${API}/api/log`).then(r => r.json());
+    const box = document.getElementById("logBox");
+    box.innerHTML = lines.slice(-50).map(l => {
+      const cls = /error|fail|exception/i.test(l) ? "log-le"
+              : /success|สำเร็จ|ok/i.test(l) ? "log-ls"
+              : /warn/i.test(l) ? "log-lw" : "log-li";
+      return `<div class="${cls}">${esc(l)}</div>`;
+    }).join("");
+    box.scrollTop = box.scrollHeight;
+  } catch {}
+}
+
+loadStats(); loadLog(); loadStatus();
+setInterval(loadStats, 30000);
+setInterval(loadLog, 12000);
+setInterval(loadStatus, 4000);  // background polling for status changes
+</script>
+</body>
+</html>
