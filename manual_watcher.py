@@ -91,17 +91,33 @@ def process_manual_post(post_id: str, data: dict, config, generator):
                     pc = _generate_ai_content(generator, topic, niche)
                     text = f"{pc.facebook_post}\n\n{' '.join(pc.hashtags)}"
 
+                # ถ้าไม่ได้แนบรูปมา → AI gen รูปให้
+                use_image = image_path
+                if not use_image:
+                    try:
+                        from gemini_image_generator import GeminiImageGenerator
+                        ai_gen = GeminiImageGenerator(config.gemini_api_key)
+                        summary = (custom_text[:200] if custom_text else
+                                   (pc.facebook_post[:200] if pc else ""))
+                        use_image = ai_gen.generate_for_post(topic=topic, niche=niche,
+                                                              content_summary=summary)
+                        if use_image:
+                            logger.info(f"[MANUAL] AI image generated: {use_image}")
+                    except Exception as e:
+                        logger.warning(f"[MANUAL] AI image gen failed: {e}")
+
                 try:
-                    if image_path:
-                        # Upload local image to FB
+                    if use_image:
+                        # Upload local image (user-supplied OR AI-generated)
                         post_id_fb = _fb_post_with_local_image(
-                            fb_page_id, page["token"], text, image_path
+                            fb_page_id, page["token"], text, use_image
                         )
                     else:
                         post_id_fb = fb_poster._post_feed(fb_page_id, page["token"], text)
                     logged_pages.append({
                         "page_id": fb_page_id, "post_id": post_id_fb,
-                        "niche": niche, "has_image": bool(image_path),
+                        "niche": niche, "has_image": bool(use_image),
+                        "ai_image": bool(use_image and use_image != image_path),
                     })
                     logger.info(f"[MANUAL] FB {fb_page_id[-4:]} OK: {post_id_fb}")
                 except Exception as e:
