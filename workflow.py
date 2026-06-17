@@ -52,6 +52,7 @@ class AutoPosterWorkflow:
 
         # AI Image Generator (Pollinations.ai — ฟรี ไม่ต้อง key)
         self.ai_image = None
+        self.ai_video = None
         if config.gemini_api_key:
             try:
                 from gemini_image_generator import GeminiImageGenerator
@@ -59,6 +60,12 @@ class AutoPosterWorkflow:
                 logger.info("AI Image Generator enabled (Pollinations.ai)")
             except Exception as e:
                 logger.warning(f"AI image gen failed to init: {e}")
+            try:
+                from video_generator import VideoGenerator
+                self.ai_video = VideoGenerator(config.gemini_api_key)
+                logger.info("AI Video Generator enabled (3 modes)")
+            except Exception as e:
+                logger.warning(f"AI video gen failed to init: {e}")
 
         self.log_dir = Path("post_logs")
         self.log_dir.mkdir(exist_ok=True)
@@ -227,9 +234,27 @@ class AutoPosterWorkflow:
                 hashtags_str = " ".join(pc.hashtags)
                 full_text    = f"{pc.facebook_post}\n\n{hashtags_str}"
 
-                # ลำดับความสำคัญ: 1) AI gen image (ตรงเนื้อหา) → 2) Pexels stock → 3) text only
+                # สลับ Video/Image ทุกรอบ (1 ใน 3 รอบ = video)
+                # 07:00 = image · 12:00 = video reel · 18:00 = image+slideshow video
+                from datetime import datetime
+                hr = datetime.now().hour
+                use_video = self.ai_video and hr in (12, 18)
+
+                ai_video_path = None
                 ai_image_path = None
-                if self.ai_image:
+
+                if use_video:
+                    try:
+                        mode = "reel" if hr == 12 else "static"
+                        ai_video_path = self.ai_video.generate_for_post(
+                            topic=pc.topic, niche=page_niche,
+                            content_text=pc.facebook_post[:300], mode=mode,
+                        )
+                    except Exception as e:
+                        logger.warning(f"AI video gen failed: {e}")
+
+                # ถ้าไม่ได้ video → ใช้ image
+                if not ai_video_path and self.ai_image:
                     try:
                         ai_image_path = self.ai_image.generate_for_post(
                             topic=pc.topic, niche=page_niche,
@@ -238,23 +263,29 @@ class AutoPosterWorkflow:
                     except Exception as e:
                         logger.warning(f"AI image gen failed for page {page_id[-4:]}: {e}")
 
+                # Pexels stock fallback
                 image_url = None
-                if not ai_image_path and self.fb.image_finder and self.generator:
+                if not ai_video_path and not ai_image_path and self.fb.image_finder and self.generator:
                     query = self.generator.get_image_query(pc.topic, page_niche)
                     image_url = self.fb.image_finder.search(query)
 
-                if ai_image_path:
+                # Post — ลำดับ: video → AI image → Pexels → text
+                if ai_video_path:
+                    post_id = self._fb_post_video(page_id, token, full_text, ai_video_path)
+                    has_image, has_video = False, True
+                elif ai_image_path:
                     post_id = self._fb_post_local_image(page_id, token, full_text, ai_image_path)
-                    has_image = True
+                    has_image, has_video = True, False
                 elif image_url:
                     post_id = self.fb._post_with_photo(page_id, token, full_text, image_url)
-                    has_image = True
+                    has_image, has_video = True, False
                 else:
                     post_id = self.fb._post_feed(page_id, token, full_text)
-                    has_image = False
+                    has_image, has_video = False, False
 
                 results.append({"page_id": page_id, "post_id": post_id, "niche": page_niche,
-                                "has_image": has_image, "ai_image": ai_image_path is not None})
+                                "has_image": has_image, "has_video": has_video,
+                                "ai_image": ai_image_path is not None, "ai_video": ai_video_path is not None})
                 st.update_facebook_status(page_id, "success")
             except Exception as e:
                 err = str(e)
@@ -280,6 +311,20 @@ class AutoPosterWorkflow:
         if "error" in j:
             raise Exception(j["error"].get("message", str(j["error"])))
         return j.get("post_id") or j.get("id", "")
+
+    def _fb_post_video(self, page_id: str, token: str, description: str, video_path: str) -> str:
+        """อัปโหลด video → Facebook Page"""
+        import requests
+        with open(video_path, "rb") as f:
+            r = requests.post(
+                f"https://graph-video.facebook.com/v21.0/{page_id}/videos",
+                files={"source": f},
+                data={"description": description, "access_token": token}, timeout=300,
+            )
+        j = r.json()
+        if "error" in j:
+            raise Exception(j["error"].get("message", str(j["error"])))
+        return j.get("id", "")
 
     # ──────────────────────────────────────────────────────
     def _post_to_platform(self, platform: str, post_fn, result: PostResult):
