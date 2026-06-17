@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1a">
+<title>Ton.AI Live Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sora:wght@600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #060912; --bg-2: #0a0e1a; --card: #0e1424; --card-2: #131a2d; --card-3: #1a2340;
+    --border: rgba(99,102,241,.12); --border-strong: rgba(99,102,241,.3);
+    --accent: #6366f1; --accent-2: #8b5cf6; --cyan: #06b6d4;
+    --green: #10b981; --yellow: #f59e0b; --red: #ef4444;
+    --text: #e2e8f0; --text-dim: #94a3b8; --muted: #64748b;
+    --fb: #1877f2; --line: #06c755; --tiktok: #ff0050;
+    --grad-1: linear-gradient(135deg,#6366f1,#8b5cf6);
+    --grad-2: linear-gradient(135deg,#06b6d4,#3b82f6);
+    --grad-3: linear-gradient(135deg,#10b981,#06b6d4);
+  }
+  html, body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif; font-size: 14px;
+    -webkit-font-smoothing: antialiased; min-height: 100vh; overflow-x: hidden;
+  }
+  body {
+    background-image:
+      radial-gradient(at 15% 5%, rgba(99,102,241,.12), transparent 40%),
+      radial-gradient(at 85% 15%, rgba(139,92,246,.08), transparent 40%),
+      radial-gradient(at 50% 100%, rgba(6,182,212,.06), transparent 50%);
+    min-height: 100vh;
+  }
+  .icon { display: inline-block; vertical-align: middle; flex-shrink: 0; }
+
+  /* ─────── LOCK SCREEN ─────── */
+  .lock-bg {
+    position: fixed; inset: 0; z-index: 9999;
+    background: radial-gradient(circle, rgba(20,30,50,.95), rgba(6,9,18,.98));
+    backdrop-filter: blur(20px);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .lock-card {
+    background: linear-gradient(180deg, rgba(19,26,45,.85), rgba(14,20,36,.95));
+    border: 1px solid var(--border-strong); border-radius: 24px;
+    padding: 40px 32px; max-width: 420px; width: 100%; text-align: center;
+    box-shadow: 0 40px 80px rgba(0,0,0,.6), 0 0 60px rgba(99,102,241,.2);
+  }
+  .lock-logo {
+    width: 72px; height: 72px; border-radius: 20px; margin: 0 auto 18px;
+    background: var(--grad-1);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Sora'; font-weight: 800; font-size: 32px; color: white;
+    box-shadow: 0 16px 40px rgba(99,102,241,.5);
+  }
+  .lock-title { font-family: 'Sora'; font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .lock-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 28px; }
+  .pin-dots { display: flex; justify-content: center; gap: 10px; margin-bottom: 24px; }
+  .pin-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: rgba(99,102,241,.15); border: 1.5px solid rgba(99,102,241,.4);
+    transition: all .2s;
+  }
+  .pin-dot.filled {
+    background: var(--grad-1); border-color: transparent;
+    transform: scale(1.15); box-shadow: 0 0 12px rgba(99,102,241,.6);
+  }
+  .pin-dot.error { background: var(--red) !important; animation: shake .5s; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+  .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 260px; margin: 0 auto; }
+  .key {
+    aspect-ratio: 1; border-radius: 14px;
+    background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.15);
+    color: var(--text); font-family: 'Sora'; font-size: 22px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all .15s; user-select: none;
+  }
+  .key:hover { background: rgba(99,102,241,.18); }
+  .key:active { transform: scale(.95); background: rgba(99,102,241,.3); }
+  .key.fn { background: rgba(239,68,68,.08); color: #fca5a5; font-size: 18px; }
+  .key.fn.ok { background: rgba(16,185,129,.1); color: #34d399; }
+  .lockout {
+    text-align: center; padding: 30px;
+  }
+  .lockout-icon { font-size: 56px; margin-bottom: 12px; }
+  .lockout-time { font-size: 32px; font-weight: 800; color: var(--yellow); font-family: 'JetBrains Mono'; margin: 12px 0; }
+
+  /* ─────── HEADER (sticky) ─────── */
+  header {
+    background: rgba(6,9,18,.85); backdrop-filter: blur(24px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand-logo {
+    width: 42px; height: 42px; border-radius: 12px; background: var(--grad-1);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Sora'; font-weight: 800; font-size: 18px; color: white;
+    box-shadow: 0 8px 24px rgba(99,102,241,.4);
+  }
+  .brand-text { min-width: 0; }
+  .brand-title { font-family: 'Sora'; font-size: 17px; font-weight: 700; line-height: 1.2; }
+  .brand-title .grad { background: var(--grad-1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .brand-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; letter-spacing: .5px; }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .live-chip {
+    display: flex; align-items: center; gap: 7px;
+    padding: 7px 12px; border-radius: 50px;
+    background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.3);
+    font-size: 12px; font-weight: 700; color: var(--green);
+  }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+  .btn {
+    background: rgba(99,102,241,.12); border: 1px solid rgba(99,102,241,.25);
+    color: #a5b4fc; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+    font-size: 12px; font-weight: 600; font-family: 'Inter';
+    display: inline-flex; align-items: center; gap: 6px; transition: all .2s;
+  }
+  .btn:hover { background: rgba(99,102,241,.22); }
+  .btn-danger { background: rgba(239,68,68,.1); border-color: rgba(239,68,68,.3); color: #fca5a5; }
+  .btn-danger:hover { background: rgba(239,68,68,.2); }
+
+  /* ─────── FULL-SCREEN GRID ─────── */
+  .container {
+    padding: 16px 20px 20px;
+    max-width: 100%;
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(12, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  /* hero countdown — large */
+  .hero {
+    grid-column: span 4;
+    background: linear-gradient(135deg, rgba(99,102,241,.2), rgba(139,92,246,.1) 50%, rgba(6,182,212,.12));
+    border: 1px solid rgba(99,102,241,.3); border-radius: 18px;
+    padding: 24px; position: relative; overflow: hidden;
+    min-height: 220px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .hero::after {
+    content: ''; position: absolute; top: -50px; right: -50px;
+    width: 200px; height: 200px; border-radius: 50%;
+    background: var(--accent); opacity: .12; filter: blur(40px);
+  }
+  .cd-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; font-weight: 700; position: relative; }
+  .cd-time {
+    font-family: 'Sora'; font-size: clamp(38px, 4vw, 56px); font-weight: 900; line-height: 1;
+    background: linear-gradient(90deg,#a5b4fc,#c4b5fd,#67e8f9);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    font-variant-numeric: tabular-nums; margin: 8px 0 6px; letter-spacing: -2px; position: relative;
+  }
+  .cd-next { font-size: 13px; color: var(--text-dim); position: relative; }
+  .cd-slots { display: flex; gap: 6px; margin-top: 14px; position: relative; }
+  .cd-slot {
+    flex: 1; background: rgba(99,102,241,.08); border: 1px solid var(--border);
+    border-radius: 10px; padding: 9px 4px; text-align: center; transition: all .2s;
+  }
+  .cd-slot.next { background: rgba(6,182,212,.18); border-color: var(--cyan); box-shadow: 0 0 16px rgba(6,182,212,.3); }
+  .cd-slot.done { opacity: .4; }
+  .cd-slot-t { font-family: 'Sora'; font-size: 14px; font-weight: 700; }
+  .cd-slot-s { font-size: 9px; color: var(--muted); margin-top: 2px; }
+  .cd-slot.next .cd-slot-s { color: var(--cyan); font-weight: 700; }
+  .cd-slot.done .cd-slot-s { color: var(--green); }
+
+  /* stage / current status */
+  .stage-card {
+    grid-column: span 4;
+    background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    padding: 22px; min-height: 220px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .stage-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; }
+  .stage-row { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .stage-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .stage-dot.active { background: var(--cyan); box-shadow: 0 0 12px var(--cyan); animation: pulse 1.4s infinite; }
+  .stage-dot.done { background: var(--green); box-shadow: 0 0 12px var(--green); }
+  .stage-text { font-family: 'Sora'; font-size: 19px; font-weight: 700; }
+  .stage-topic {
+    font-size: 13px; color: var(--text-dim); margin-top: 10px; line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .stage-meta { font-size: 11px; color: var(--muted); margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+  /* mini stats — 4 column */
+  .mini-row {
+    grid-column: span 4;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .mini-stat {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+    transition: all .2s; min-width: 0;
+  }
+  .mini-stat:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+  .mini-ic {
+    width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mini-info { flex: 1; min-width: 0; }
+  .mini-val { font-family: 'Sora'; font-size: 22px; font-weight: 800; line-height: 1; }
+  .mini-lbl { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-top: 4px; }
+
+  /* panel base */
+  .panel {
+    background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .panel-head {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .panel-title { font-family: 'Sora'; font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .panel-title-ic { width: 28px; height: 28px; border-radius: 8px;
+    background: rgba(99,102,241,.12); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; }
+  .panel-body { padding: 16px 18px; flex: 1; overflow: auto; }
+  .panel-body.flush { padding: 0; }
+  .badge-soft { font-size: 10px; padding: 3px 8px; border-radius: 6px; background: rgba(99,102,241,.12); color: #a5b4fc; font-weight: 700; }
+
+  /* posts table */
+  .posts-panel { grid-column: span 8; }
+  .ptbl { width: 100%; border-collapse: collapse; }
+  .ptbl th {
+    font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px;
+    font-weight: 700; padding: 12px 18px; text-align: left;
+    border-bottom: 1px solid var(--border); background: rgba(99,102,241,.03);
+    position: sticky; top: 0;
+  }
+  .ptbl td {
+    padding: 14px 18px; border-bottom: 1px solid rgba(99,102,241,.06);
+    font-size: 13px; vertical-align: middle;
+  }
+  .ptbl tbody tr { transition: background .2s; cursor: pointer; }
+  .ptbl tbody tr:hover { background: rgba(99,102,241,.05); }
+  .topic-cell { max-width: 380px; }
+  .topic-text {
+    font-weight: 500;
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .topic-source { font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .time-cell { font-size: 12px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .chip { display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700;
+    border: 1px solid; margin-right: 4px; margin-bottom: 2px; }
+  .chip-fb { background: rgba(24,119,242,.12); color: #60a5fa; border-color: rgba(24,119,242,.3); }
+  .chip-line { background: rgba(6,199,85,.12); color: #34d399; border-color: rgba(6,199,85,.3); }
+  .chip-tt { background: rgba(255,0,80,.12); color: #fb7185; border-color: rgba(255,0,80,.3); }
+  .chip-img { background: rgba(245,158,11,.12); color: #fbbf24; border-color: rgba(245,158,11,.3); }
+  .chip-vid { background: rgba(236,72,153,.12); color: #f472b6; border-color: rgba(236,72,153,.3); }
+  .chip-err { background: rgba(239,68,68,.12); color: #fca5a5; border-color: rgba(239,68,68,.3); }
+
+  /* Platform stats row */
+  .plat-row {
+    grid-column: span 12;
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+  }
+
+  /* n8n-style Flow Diagram */
+  .flow-panel { grid-column: span 12; }
+  .flow-node-rect {
+    fill: var(--card-2); stroke: rgba(99,102,241,.25); stroke-width: 1.5;
+    transition: all .4s;
+  }
+  .flow-node.active .flow-node-rect {
+    stroke: var(--cyan); stroke-width: 2.5;
+    filter: drop-shadow(0 0 14px rgba(6,182,212,.55));
+    animation: nodePulse 1.3s infinite;
+  }
+  .flow-node.success .flow-node-rect {
+    stroke: var(--green); stroke-width: 2;
+    filter: drop-shadow(0 0 10px rgba(16,185,129,.45));
+  }
+  .flow-node.failed .flow-node-rect {
+    stroke: var(--red); stroke-width: 2;
+    filter: drop-shadow(0 0 10px rgba(239,68,68,.5));
+  }
+  @keyframes nodePulse {
+    0%,100% { filter: drop-shadow(0 0 8px rgba(6,182,212,.4)); }
+    50% { filter: drop-shadow(0 0 22px rgba(6,182,212,.85)); }
+  }
+  .flow-node-label { fill: var(--text); font-size: 11px; font-weight: 600; }
+  .flow-node-sub { fill: var(--text-dim); font-size: 9px; }
+
+  .flow-edge {
+    stroke: rgba(99,102,241,.2); stroke-width: 2; fill: none;
+    transition: stroke .3s;
+  }
+  .flow-edge.active {
+    stroke: var(--cyan); stroke-width: 2.5;
+    stroke-dasharray: 6 4;
+    animation: dashFlow .7s linear infinite;
+  }
+  .flow-edge.success { stroke: var(--green); stroke-width: 2; }
+  @keyframes dashFlow { to { stroke-dashoffset: -20; } }
+
+  /* fb pages breakdown */
+  .pages-panel { grid-column: span 4; }
+  .page-item {
+    padding: 12px 14px; background: var(--card-2);
+    border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px;
+  }
+  .page-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; margin-bottom: 6px; }
+  .page-name { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .page-count { font-family: 'Sora'; font-size: 17px; font-weight: 800; color: #60a5fa; }
+  .page-bar { height: 4px; background: rgba(24,119,242,.12); border-radius: 4px; overflow: hidden; }
+  .page-bar-fill { height: 100%; background: linear-gradient(90deg,#1877f2,#60a5fa); border-radius: 4px; transition: width .6s ease; }
+
+  /* responsive */
+  @media (max-width: 1100px) {
+    .hero, .stage-card, .mini-row { grid-column: span 6; }
+    .posts-panel, .pages-panel { grid-column: span 12; }
+  }
+  @media (max-width: 720px) {
+    .container { padding: 12px; }
+    .hero, .stage-card { grid-column: span 12; min-height: auto; }
+    .mini-row { grid-column: span 12; }
+    .ptbl th, .ptbl td { padding: 10px 12px; font-size: 11px; }
+    .ptbl thead th:nth-child(3), .ptbl tbody td:nth-child(3) { display: none; }
+    .cd-time { font-size: 38px; }
+  }
+
+  /* modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(6,9,18,.95); backdrop-filter: blur(12px); z-index: 1000;
+    display: none; align-items: center; justify-content: center; padding: 20px; }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--card); border: 1px solid var(--border-strong); border-radius: 18px;
+    max-width: 800px; width: 100%; max-height: 92vh; overflow-y: auto;
+    box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  }
+  .modal-head { position: sticky; top: 0; padding: 18px 22px; border-bottom: 1px solid var(--border);
+    background: var(--card); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .modal-title { font-family: 'Sora'; font-size: 15px; font-weight: 700; line-height: 1.4; }
+  .modal-close { background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.3);
+    color: var(--red); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; font-size: 16px; flex-shrink: 0; }
+  .modal-body { padding: 20px 22px; }
+  .modal-sec { margin-bottom: 18px; }
+  .modal-sec-title { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; margin-bottom: 8px; }
+  .modal-text-box { background: var(--card-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; color: var(--text-dim); }
+  .modal-err { background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25);
+    border-radius: 8px; padding: 10px 12px; color: #fca5a5; font-size: 11px; margin-bottom: 6px; word-break: break-all; font-family: 'JetBrains Mono'; }
+
+  .empty { text-align: center; padding: 40px; color: var(--muted); font-size: 12px; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(99,102,241,.25); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,.4); }
+
+  footer { text-align: center; padding: 20px; color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════ LOCK SCREEN ═══════ -->
+<div class="lock-bg" id="lockBg">
+  <div class="lock-card">
+    <div class="lock-logo">T</div>
+    <div class="lock-title">Ton.AI Live Dashboard</div>
+    <div class="lock-sub" id="lockSub">🔒 ใส่ PIN เพื่อเข้าใช้งาน</div>
+
+    <div id="lockEntry">
+      <div class="pin-dots" id="pinDots"></div>
+      <div class="keypad" id="keypad"></div>
+    </div>
+
+    <div id="lockoutBox" class="lockout" style="display:none">
+      <div class="lockout-icon">🔐</div>
+      <div style="color:#fca5a5;font-weight:700">ระบบถูก Lock</div>
+      <div class="lockout-time" id="lockoutTime">12:00</div>
+      <div style="font-size:12px;color:var(--text-dim)">กรุณารอเพื่อลองใหม่</div>
+    </div>
+  </div>
+</div>
+
+<!-- ICONS -->
+<svg width="0" height="0" style="position:absolute">
+<defs>
+  <symbol id="ic-fb" viewBox="0 0 24 24"><path fill="currentColor" d="M9.2 21.5h4v-8h3.6l.4-4h-4V7.5a1 1 0 0 1 1-1h3v-4h-3a5 5 0 0 0-5 5v2h-2l-.4 4h2.4v8z"/></symbol>
+  <symbol id="ic-line" viewBox="0 0 24 24"><path fill="currentColor" d="M19.4 9.9c.3 0 .6.3.6.6s-.3.6-.6.6h-1.8v1.1h1.8c.3 0 .6.3.6.6s-.3.6-.6.6h-2.4c-.3 0-.6-.3-.6-.6V8.1c0-.3.3-.6.6-.6h2.4c.3 0 .6.3.6.6s-.3.6-.6.6h-1.8v1.1h1.8zM24 10.3C24 5 18.6.6 12 .6S0 5 0 10.3c0 4.8 4.3 8.8 10 9.6.4.1.9.3 1 .6.1.3.1.8 0 1.1l-.1 1c0 .3-.2 1.2 1 .6 1.3-.5 6.9-4 9.4-7C23.2 14.4 24 12.4 24 10.3z"/></symbol>
+  <symbol id="ic-tt" viewBox="0 0 24 24"><path fill="currentColor" d="M19.6 6.7a4.8 4.8 0 0 1-3.8-4.2V2h-3.4v13.7a2.9 2.9 0 0 1-5.2 1.7 2.9 2.9 0 0 1 3.2-4.5v-3.5a6.3 6.3 0 0 0-5.4 10.7 6.3 6.3 0 0 0 10.9-4.4V8.7a8.2 8.2 0 0 0 4.8 1.5V6.8a4.8 4.8 0 0 1-1-.1z"/></symbol>
+  <symbol id="ic-chart" viewBox="0 0 24 24"><path fill="currentColor" d="M3 13h2v8H3v-8zm4-7h2v15H7V6zm4 3h2v12h-2V9zm4-5h2v17h-2V4zm4 8h2v9h-2v-9z"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></symbol>
+  <symbol id="ic-clock" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm.5-5H11v6l5.3 3.2.7-1.2-4.5-2.7V7z"/></symbol>
+  <symbol id="ic-bell" viewBox="0 0 24 24"><path fill="currentColor" d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11c0-3-2-5.5-5-6V4a1 1 0 1 0-2 0v1c-3 .5-5 3-5 6v5l-2 2v1h16v-1l-2-2z"/></symbol>
+  <symbol id="ic-logout" viewBox="0 0 24 24"><path fill="currentColor" d="M10 15.6L11.5 17l5-5-5-5-1.4 1.4L12.7 11H3v2h9.7zM19 3H5c-1.1 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></symbol>
+  <symbol id="ic-page" viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></symbol>
+</defs>
+</svg>
+
+<!-- ═══════ HEADER ═══════ -->
+<header style="display:none" id="dashHeader">
+  <div class="brand">
+    <div class="brand-logo">T</div>
+    <div class="brand-text">
+      <div class="brand-title"><span class="grad">Ton.AI</span> Live Dashboard</div>
+      <div class="brand-sub" id="connStatus">เชื่อมต่อ Firebase...</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-chip"><div class="live-dot"></div> LIVE</div>
+    <span class="badge-soft" id="lastSync">—</span>
+    <button class="btn btn-danger" onclick="logout()">
+      <svg class="icon" width="13" height="13"><use href="#ic-logout"/></svg> Logout
+    </button>
+  </div>
+</header>
+
+<!-- ═══════ MAIN ═══════ -->
+<div class="container" id="dashContainer" style="display:none">
+
+  <!-- Countdown -->
+  <div class="hero">
+    <div class="cd-label">⏰ โพสต์ถัดไปใน</div>
+    <div class="cd-time" id="cdTime">--:--:--</div>
+    <div class="cd-next" id="cdNext">กำลังคำนวณ...</div>
+    <div class="cd-slots" id="cdSlots"></div>
+  </div>
+
+  <!-- Current Stage -->
+  <div class="stage-card">
+    <div class="stage-label">⚡ Current Status</div>
+    <div class="stage-row">
+      <div class="stage-dot" id="stageDot"></div>
+      <div class="stage-text" id="stageText">Idle</div>
+    </div>
+    <div class="stage-topic" id="currentTopic">รอ schedule ถัดไป</div>
+    <div class="stage-meta" id="stageMeta"></div>
+  </div>
+
+  <!-- Mini Stats — เปลี่ยนเป็น 6 ตัว ตรงข้อมูลจริง -->
+  <div class="mini-row">
+    <div class="mini-stat">
+      <div class="mini-ic" style="background:rgba(99,102,241,.12);color:var(--accent)">
+        <svg class="icon" width="20" height="20"><use href="#ic-chart"/></svg>
+      </div>
+      <div class="mini-info"><div class="mini-val" id="s_total">—</div><div class="mini-lbl">รอบทั้งหมด</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-ic" style="background:rgba(16,185,129,.12);color:var(--green)">
+        <svg class="icon" width="20" height="20"><use href="#ic-check"/></svg>
+      </div>
+      <div class="mini-info"><div class="mini-val" style="color:var(--green)" id="s_rate">—</div><div class="mini-lbl">อัตราสำเร็จ</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-ic" style="background:rgba(6,182,212,.12);color:var(--cyan)">
+        <svg class="icon" width="20" height="20"><use href="#ic-clock"/></svg>
+      </div>
+      <div class="mini-info"><div class="mini-val" style="color:var(--cyan)" id="s_today">—</div><div class="mini-lbl">วันนี้</div></div>
+    </div>
+  </div>
+
+  <!-- Platform Stats — แสดงตามจริง: FB pages + LINE + TikTok -->
+  <div class="plat-row">
+    <div class="mini-stat">
+      <div class="mini-ic" style="background:rgba(24,119,242,.12);color:var(--fb)">
+        <svg class="icon" width="20" height="20"><use href="#ic-fb"/></svg>
+      </div>
+      <div class="mini-info"><div class="mini-val" style="color:#60a5fa" id="s_fb">—</div><div class="mini-lbl">FB Posts</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-ic" style="background:rgba(6,199,85,.12);color:var(--line)">
+        <svg class="icon" width="20" height="20"><use href="#ic-line"/></svg>
+      </div>
+      <div class="mini-info"><div class="mini-val" style="color:#34d399" id="s_line">—</div><div class="mini-lbl">LINE</div></div>
+    </div>
+    <div class="mini-stat">
+      <div class="mini-ic" style="background:rgba(255,0,80,.12);color:var(--tiktok)">
+        <svg class="icon" width="20" height="20"><use href="#ic-tt"/></svg>
+      </div>
+      <div class="mini-info"><div class="mini-val" style="color:#fb7185" id="s_tt">—</div><div class="mini-lbl">TikTok</div></div>
+    </div>
+  </div>
+
+  <!-- n8n-style Workflow Flow — animation ตาม status จริง -->
+  <div class="flow-panel panel">
+    <div class="panel-head">
+      <div class="panel-title">
+        <div class="panel-title-ic" style="background:rgba(245,158,11,.12);color:#fbbf24">
+          <svg class="icon" width="14" height="14"><use href="#ic-chart"/></svg>
+        </div>
+        Workflow Status
+      </div>
+      <span class="badge-soft" id="flowBadge">⚪ Idle</span>
+    </div>
+    <div class="panel-body" style="padding:18px 24px">
+      <svg id="flowSvg" viewBox="0 0 900 200" style="width:100%;height:auto;display:block"></svg>
+    </div>
+  </div>
+
+  <!-- Recent Posts -->
+  <div class="posts-panel panel">
+    <div class="panel-head">
+      <div class="panel-title">
+        <div class="panel-title-ic"><svg class="icon" width="14" height="14"><use href="#ic-clock"/></svg></div>
+        Recent Posts
+      </div>
+      <span class="badge-soft" id="recentCount">0</span>
+    </div>
+    <div class="panel-body flush" style="max-height:520px">
+      <table class="ptbl">
+        <thead><tr><th>เวลา</th><th>หัวข้อ</th><th>Platforms</th></tr></thead>
+        <tbody id="postsBody"><tr><td colspan="3"><div class="empty">โหลด...</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FB Pages -->
+  <div class="pages-panel panel">
+    <div class="panel-head">
+      <div class="panel-title">
+        <div class="panel-title-ic" style="background:rgba(24,119,242,.12);color:var(--fb)">
+          <svg class="icon" width="14" height="14"><use href="#ic-page"/></svg>
+        </div>
+        Facebook Pages
+      </div>
+      <span class="badge-soft" id="pagesCount">0</span>
+    </div>
+    <div class="panel-body">
+      <div id="fbPagesBox">
+        <div class="empty">ไม่มีข้อมูล</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-sec-title" id="m_time">—</div>
+        <div class="modal-title" id="m_title">—</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="m_body"><div class="empty">โหลด...</div></div>
+  </div>
+</div>
+
+<footer style="display:none" id="dashFooter">© 2026 Ton.AI · Live Dashboard · Update ทุก ~1 วินาที (Real-time RTDB)</footer>
+
+<!-- ═══════ FIREBASE SDK ═══════ -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB-BQw5JyWeSN0ZUYfbkEBmAFNl6EowhQk",
+  authDomain: "ton-ai-tech.firebaseapp.com",
+  databaseURL: "https://ton-ai-tech-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ton-ai-tech",
+  storageBucket: "ton-ai-tech.firebasestorage.app",
+  messagingSenderId: "89086370395",
+  appId: "1:89086370395:web:85baafa8e260e0b736557e",
+};
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+window.__firebase = { db, ref, onValue, query, limitToLast };
+window.dispatchEvent(new Event("firebaseReady"));
+</script>
+
+<!-- ═══════ APP LOGIC ═══════ -->
+<script>
+// ─── PIN LOCK ───
+const PIN_HASH = "466d229c1c546204bcefcc3ac018a550634d2857739799efe734162dec34fa09";
+const PIN_LENGTH = 7;
+const LOCKOUT_MS = 12 * 60 * 1000;
+const LOCKOUT_KEY = "tonai_lockout_until";
+const TIMES = ["07:00","12:00","18:00"];
+
+let pinBuffer = [];
+
+async function sha256(t) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+function renderPinDots() {
+  const dots = document.getElementById("pinDots");
+  dots.innerHTML = Array.from({length: PIN_LENGTH}, (_, i) =>
+    `<div class="pin-dot ${i < pinBuffer.length ? 'filled' : ''}"></div>`
+  ).join("");
+}
+
+function flashError() {
+  document.querySelectorAll(".pin-dot").forEach(d => d.classList.add("error"));
+  setTimeout(() => { pinBuffer = []; renderPinDots(); }, 700);
+}
+
+function startLockout(until) {
+  document.getElementById("lockEntry").style.display = "none";
+  document.getElementById("lockoutBox").style.display = "block";
+  document.getElementById("lockSub").style.display = "none";
+  const tick = () => {
+    const left = until - Date.now();
+    if (left <= 0) { localStorage.removeItem(LOCKOUT_KEY); location.reload(); return; }
+    const m = Math.floor(left / 60000);
+    const s = Math.floor((left % 60000) / 1000);
+    document.getElementById("lockoutTime").textContent =
+      String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
+  };
+  tick(); setInterval(tick, 1000);
+}
+
+async function submitPin() {
+  const pin = pinBuffer.join("");
+  const hash = await sha256(pin);
+  if (hash === PIN_HASH) {
+    document.querySelectorAll(".pin-dot").forEach(d => {
+      d.style.background = "var(--green)"; d.style.boxShadow = "0 0 16px var(--green)";
+    });
+    setTimeout(unlock, 400);
+  } else {
+    flashError();
+    const until = Date.now() + LOCKOUT_MS;
+    localStorage.setItem(LOCKOUT_KEY, String(until));
+    setTimeout(() => startLockout(until), 800);
+  }
+}
+
+function pressKey(v) {
+  if (v === "clear") pinBuffer = [];
+  else if (v === "back") pinBuffer.pop();
+  else if (v === "ok") { if (pinBuffer.length === PIN_LENGTH) submitPin(); }
+  else if (pinBuffer.length < PIN_LENGTH) {
+    pinBuffer.push(v);
+    if (pinBuffer.length === PIN_LENGTH) setTimeout(submitPin, 150);
+  }
+  renderPinDots();
+}
+
+function buildKeypad() {
+  const layout = ["1","2","3","4","5","6","7","8","9",
+    {l:"⌫",v:"back",fn:true}, "0", {l:"✓",v:"ok",fn:true,ok:true}];
+  const kp = document.getElementById("keypad");
+  kp.innerHTML = layout.map(k => typeof k === "string"
+    ? `<button class="key" data-key="${k}">${k}</button>`
+    : `<button class="key fn ${k.ok?'ok':''}" data-key="${k.v}">${k.l}</button>`
+  ).join("");
+  kp.addEventListener("click", e => {
+    const b = e.target.closest(".key");
+    if (b) pressKey(b.dataset.key);
+  });
+  document.addEventListener("keydown", e => {
+    if (document.getElementById("lockBg").style.display === "none") return;
+    if (e.key >= "0" && e.key <= "9") pressKey(e.key);
+    else if (e.key === "Backspace") pressKey("back");
+    else if (e.key === "Enter") pressKey("ok");
+  });
+}
+
+function unlock() {
+  document.getElementById("lockBg").style.display = "none";
+  document.getElementById("dashHeader").style.display = "flex";
+  document.getElementById("dashContainer").style.display = "grid";
+  document.getElementById("dashFooter").style.display = "block";
+  initApp();
+}
+
+function logout() {
+  if (confirm("⚠ ออกจากระบบ?\nต้องใส่ PIN ใหม่")) location.reload();
+}
+window.logout = logout;
+
+// Init lock
+(function() {
+  const lockedUntil = parseInt(localStorage.getItem(LOCKOUT_KEY) || "0", 10);
+  if (lockedUntil > Date.now()) { startLockout(lockedUntil); return; }
+  buildKeypad(); renderPinDots();
+})();
+
+// ─── COUNTDOWN ───
+function getNext() {
+  const now = new Date();
+  let next = null;
+  for (const t of TIMES) {
+    const [h,m] = t.split(":").map(Number);
+    const d = new Date(now); d.setHours(h,m,0,0);
+    if (d > now && (!next || d < next.date)) next = {label:t, date:d};
+  }
+  if (!next) {
+    const [h,m] = TIMES[0].split(":").map(Number);
+    const d = new Date(now); d.setDate(d.getDate()+1); d.setHours(h,m,0,0);
+    next = {label:TIMES[0], date:d, tomorrow:true};
+  }
+  return next;
+}
+
+function tick() {
+  const now = new Date(), next = getNext();
+  const diff = Math.max(0, next.date - now);
+  const h = String(Math.floor(diff/3600000)).padStart(2,"0");
+  const m = String(Math.floor(diff%3600000/60000)).padStart(2,"0");
+  const s = String(Math.floor(diff%60000/1000)).padStart(2,"0");
+  const cdT = document.getElementById("cdTime"), cdN = document.getElementById("cdNext");
+  if (cdT) cdT.textContent = `${h}:${m}:${s}`;
+  if (cdN) cdN.textContent = `รอบ ${next.label} น.${next.tomorrow?" (พรุ่งนี้)":""}`;
+
+  const slots = document.getElementById("cdSlots");
+  if (slots && slots.children.length !== TIMES.length) {
+    slots.innerHTML = TIMES.map(t =>
+      `<div class="cd-slot"><div class="cd-slot-t">${t}</div><div class="cd-slot-s">—</div></div>`
+    ).join("");
+  }
+  if (slots) TIMES.forEach((t,i) => {
+    const [th,tm] = t.split(":").map(Number);
+    const sd = new Date(now); sd.setHours(th,tm,0,0);
+    const slot = slots.children[i];
+    if (!slot) return;
+    slot.className = "cd-slot";
+    const sub = slot.querySelector(".cd-slot-s");
+    if (sd <= now) { slot.classList.add("done"); sub.textContent = "✓ Done"; }
+    else if (t === next.label) { slot.classList.add("next"); sub.textContent = "Next"; }
+    else { sub.textContent = "Wait"; }
+  });
+}
+setInterval(tick, 1000);
+
+// ─── ESC HTML ───
+const esc = s => !s ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+// ─── APP INIT ───
+let allPosts = [];
+const FB_PAGE_NAMES = {
+  "466917400080770": "ขนมจีนทะเลสด",
+  "476932022478246": "Poshji Studio",
+  "655807354442986": "TON AI Tech",
+  "238168293051126": "พอสจิแซนวิส",
+};
+
+function initApp() {
+  tick();
+  if (!window.__firebase) {
+    window.addEventListener("firebaseReady", initApp, {once: true});
+    return;
+  }
+  const { db, ref, onValue, query, limitToLast } = window.__firebase;
+  document.getElementById("connStatus").textContent = "✓ Real-time RTDB";
+
+  // Status listener
+  onValue(ref(db, "status/current"), snap => {
+    if (snap.exists()) handleStatus(snap.val());
+    document.getElementById("lastSync").textContent = new Date().toLocaleTimeString("th-TH", {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+  }, err => {
+    document.getElementById("connStatus").textContent = "⚠ " + err.code;
+  });
+
+  // Posts listener
+  onValue(query(ref(db, "posts"), limitToLast(80)), snap => {
+    allPosts = [];
+    snap.forEach(c => allPosts.push({_id: c.key, ...c.val()}));
+    allPosts.reverse();
+    renderPosts();
+  }, err => {
+    document.getElementById("postsBody").innerHTML =
+      `<tr><td colspan="3"><div class="empty">⚠ ${err.code}</div></td></tr>`;
+  });
+}
+
+function handleStatus(s) {
+  const dot = document.getElementById("stageDot");
+  const txt = document.getElementById("stageText");
+  const topic = document.getElementById("currentTopic");
+  const meta = document.getElementById("stageMeta");
+  const flowBadge = document.getElementById("flowBadge");
+
+  if (s.running) {
+    dot.className = "stage-dot active";
+    txt.textContent = stageLabel(s.stage);
+    flowBadge.innerHTML = `🟢 Running · ${esc(s.stage)}`;
+    flowBadge.style.background = "rgba(6,182,212,.2)";
+    flowBadge.style.color = "var(--cyan)";
+  } else {
+    dot.className = "stage-dot " + (s.stage === "done" ? "done" : "");
+    txt.textContent = s.stage === "done" ? "Done ✓" : "Idle";
+    flowBadge.innerHTML = s.stage === "done" ? "✅ Completed" : "⚪ Idle";
+    flowBadge.style.background = s.stage === "done" ? "rgba(16,185,129,.15)" : "rgba(99,102,241,.12)";
+    flowBadge.style.color = s.stage === "done" ? "var(--green)" : "#a5b4fc";
+  }
+  topic.textContent = s.topic || "รอ schedule ถัดไป";
+  let metaHtml = "";
+  if (s.source) metaHtml += `<span>📡 ${esc(s.source)}</span>`;
+  if (s.started_at) {
+    const t = new Date(s.started_at).toLocaleTimeString("th-TH", {hour:"2-digit", minute:"2-digit"});
+    metaHtml += `<span>🕐 เริ่ม ${t}</span>`;
+  }
+  meta.innerHTML = metaHtml;
+
+  // Update n8n flow animation
+  renderFlow(s);
+}
+
+// ─── n8n FLOW DIAGRAM ───
+const FLOW_NODES = [
+  { id: "trigger", label: "Trigger",      sub: "Schedule",  x: 30,  y: 75, color: "#f59e0b" },
+  { id: "ai",      label: "AI Generate",  sub: "Gemini",    x: 200, y: 75, color: "#8b5cf6" },
+  { id: "media",   label: "Media Gen",    sub: "Img/Video", x: 370, y: 75, color: "#06b6d4" },
+  { id: "facebook",label: "Facebook",     sub: "4 Pages",   x: 600, y: 15, color: "#1877f2" },
+  { id: "line",    label: "LINE",         sub: "Broadcast", x: 600, y: 75, color: "#06c755" },
+  { id: "tiktok",  label: "TikTok",       sub: "Video",     x: 600, y: 135, color: "#ff0050" },
+];
+const FLOW_EDGES = [
+  ["trigger","ai"], ["ai","media"],
+  ["media","facebook"], ["media","line"], ["media","tiktok"],
+];
+
+function renderFlow(s) {
+  const svg = document.getElementById("flowSvg");
+  if (!svg) return;
+  const NW = 150, NH = 50;
+
+  // Determine node states from current status
+  const states = {};
+  // Idle = ทุก node เป็น idle (ไม่มี animation)
+  if (!s || (!s.running && s.stage !== "done")) {
+    // Static idle view
+  } else if (s.stage === "done") {
+    // ทุกอันสำเร็จ
+    FLOW_NODES.forEach(n => states[n.id] = "success");
+  } else {
+    // Running — node ตาม stage
+    if (s.running) states.trigger = "success";
+
+    if (s.stage === "generating") states.ai = "active";
+    else if (s.topic) states.ai = "success";
+
+    if (["facebook","line","tiktok"].includes(s.stage)) {
+      states.media = "success";
+      states[s.stage] = "active";
+      // previous platforms already done
+      const order = ["facebook","line","tiktok"];
+      const cur = order.indexOf(s.stage);
+      for (let i = 0; i < cur; i++) {
+        const p = order[i];
+        const ps = s.preview?.[p === "facebook" ? "facebook_pages" : p];
+        if (Array.isArray(ps)) {
+          if (ps.every(x => x.status === "success")) states[p] = "success";
+          else if (ps.some(x => x.status === "failed")) states[p] = "failed";
+        } else if (ps && ps.status === "success") states[p] = "success";
+        else if (ps && ps.status === "failed") states[p] = "failed";
+      }
+    }
+
+    // Final status per platform from preview
+    if (s.preview) {
+      const fbp = s.preview.facebook_pages || [];
+      if (fbp.length) {
+        if (fbp.every(x => x.status === "success")) states.facebook = "success";
+        else if (fbp.some(x => x.status === "failed") && !fbp.some(x => x.status === "pending")) states.facebook = "failed";
+        else if (fbp.some(x => x.status === "pending")) states.facebook = "active";
+        else if (fbp.some(x => x.status === "success")) states.facebook = "success";
+      }
+      if (s.preview.line?.status === "success") states.line = "success";
+      else if (s.preview.line?.status === "failed") states.line = "failed";
+      if (s.preview.tiktok?.status === "success") states.tiktok = "success";
+      else if (s.preview.tiktok?.status === "failed") states.tiktok = "failed";
+    }
+  }
+
+  // Build SVG
+  let html = "";
+  // Edges
+  for (const [from, to] of FLOW_EDGES) {
+    const a = FLOW_NODES.find(n => n.id === from);
+    const b = FLOW_NODES.find(n => n.id === to);
+    const x1 = a.x + NW, y1 = a.y + NH/2;
+    const x2 = b.x,      y2 = b.y + NH/2;
+    const mx = (x1 + x2) / 2;
+    const path = `M ${x1} ${y1} C ${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`;
+    let cls = "flow-edge";
+    if (states[to] === "active") cls += " active";
+    else if (states[to] === "success") cls += " success";
+    html += `<path class="${cls}" d="${path}"/>`;
+  }
+  // Nodes
+  for (const n of FLOW_NODES) {
+    const st = states[n.id] || "idle";
+    let cls = "flow-node " + st;
+    let badge = "";
+    if (st === "success") badge = `<g transform="translate(${n.x + NW - 16}, ${n.y + 10})"><circle r="8" fill="#10b981"/><text x="0" y="3" text-anchor="middle" fill="white" font-size="11" font-weight="700">✓</text></g>`;
+    else if (st === "failed") badge = `<g transform="translate(${n.x + NW - 16}, ${n.y + 10})"><circle r="8" fill="#ef4444"/><text x="0" y="3" text-anchor="middle" fill="white" font-size="11" font-weight="700">✗</text></g>`;
+    else if (st === "active") badge = `<circle cx="${n.x + NW - 12}" cy="${n.y + 12}" r="5" fill="#06b6d4"><animate attributeName="r" values="5;9;5" dur=".9s" repeatCount="indefinite"/></circle>`;
+
+    html += `<g class="${cls}">
+      <rect class="flow-node-rect" x="${n.x}" y="${n.y}" width="${NW}" height="${NH}" rx="10"/>
+      <rect x="${n.x + 10}" y="${n.y + 12}" width="26" height="26" rx="7" fill="${n.color}" opacity=".18"/>
+      <circle cx="${n.x + 23}" cy="${n.y + 25}" r="6" fill="${n.color}"/>
+      <text class="flow-node-label" x="${n.x + 46}" y="${n.y + 22}">${n.label}</text>
+      <text class="flow-node-sub" x="${n.x + 46}" y="${n.y + 36}">${n.sub}</text>
+      ${badge}
+    </g>`;
+  }
+
+  svg.innerHTML = html;
+}
+// Initial idle render
+renderFlow(null);
+
+function stageLabel(s) {
+  return {
+    idle: "Idle", generating: "🤖 AI Generate",
+    facebook: "📘 Posting Facebook", line: "💚 Broadcasting LINE",
+    tiktok: "🎵 Uploading TikTok", done: "Done ✓",
+    preview_ready: "Preview Ready", image_search: "🖼 Finding Image",
+  }[s] || s;
+}
+
+function renderPosts() {
+  // Stats
+  let fbCount = 0, lineCount = 0, ttCount = 0, successRuns = 0, todayCount = 0;
+  const today = new Date().toISOString().slice(0,10);
+  const fbPageStats = {};
+  for (const p of allPosts) {
+    if ((p.success_count || 0) > 0) successRuns++;
+    if (p.timestamp?.startsWith?.(today)) todayCount++;
+    for (const r of (p.results || [])) {
+      if (r.platform === "facebook") {
+        for (const pg of (r.pages || [])) {
+          fbCount++;
+          fbPageStats[pg.page_id] = (fbPageStats[pg.page_id] || 0) + 1;
+        }
+      } else if (["line","line_flex"].includes(r.platform)) lineCount++;
+      else if (r.platform === "tiktok") ttCount++;
+    }
+  }
+
+  document.getElementById("s_total").textContent = allPosts.length;
+  document.getElementById("s_rate").textContent = allPosts.length ? Math.round(successRuns/allPosts.length*100) + "%" : "0%";
+  document.getElementById("s_today").textContent = todayCount;
+  document.getElementById("s_fb").textContent = fbCount;
+  const sLine = document.getElementById("s_line"); if (sLine) sLine.textContent = lineCount;
+  const sTt = document.getElementById("s_tt"); if (sTt) sTt.textContent = ttCount;
+  document.getElementById("recentCount").textContent = allPosts.length;
+
+  // FB Pages
+  const pgBox = document.getElementById("fbPagesBox");
+  const pgArr = Object.entries(fbPageStats).sort((a,b) => b[1] - a[1]);
+  document.getElementById("pagesCount").textContent = pgArr.length;
+  if (!pgArr.length) {
+    pgBox.innerHTML = `<div class="empty">ไม่มีข้อมูล</div>`;
+  } else {
+    const max = pgArr[0][1];
+    pgBox.innerHTML = pgArr.map(([pid, cnt]) => `
+      <div class="page-item">
+        <div class="page-head">
+          <div class="page-name">
+            <svg class="icon" width="13" height="13" style="color:var(--fb)"><use href="#ic-fb"/></svg>
+            ${esc(FB_PAGE_NAMES[pid] || pid.slice(-6))}
+          </div>
+          <div class="page-count">${cnt}</div>
+        </div>
+        <div class="page-bar"><div class="page-bar-fill" style="width:${cnt/max*100}%"></div></div>
+      </div>
+    `).join("");
+  }
+
+  // Posts table
+  const tb = document.getElementById("postsBody");
+  if (!allPosts.length) {
+    tb.innerHTML = `<tr><td colspan="3"><div class="empty">ยังไม่มีประวัติการโพสต์</div></td></tr>`;
+    return;
+  }
+  tb.innerHTML = allPosts.slice(0, 30).map((p, idx) => {
+    const t = p.timestamp ? new Date(p.timestamp).toLocaleString("th-TH",
+      {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"}) : "—";
+    const chips = [];
+    for (const r of (p.results || [])) {
+      if (r.platform === "facebook") {
+        for (const pg of (r.pages || [])) {
+          let media = "";
+          if (pg.has_video || pg.ai_video) media = '<svg class="icon" width="10" height="10" style="margin-left:3px"><use href="#ic-chart"/></svg>VIDEO';
+          else if (pg.has_image || pg.ai_image) media = '🖼';
+          chips.push(`<span class="chip chip-fb">FB · ${esc(FB_PAGE_NAMES[pg.page_id] || pg.page_id?.slice(-4))} ${media}</span>`);
+        }
+      } else if (["line","line_flex"].includes(r.platform)) {
+        chips.push(`<span class="chip chip-line">LINE</span>`);
+      } else if (r.platform === "tiktok") {
+        chips.push(`<span class="chip chip-tt">TikTok</span>`);
+      }
+    }
+    if ((p.error_count || 0) > 0) chips.push(`<span class="chip chip-err">${p.error_count} err</span>`);
+    return `<tr onclick="openPost(${idx})">
+      <td class="time-cell">${esc(t)}</td>
+      <td class="topic-cell">
+        <div class="topic-text" title="${esc(p.topic)}">${esc(p.topic || "—")}</div>
+        ${p.content?.source ? `<div class="topic-source">📡 ${esc(p.content.source)}</div>` : ""}
+      </td>
+      <td>${chips.join("") || '<span style="color:var(--muted);font-size:11px">—</span>'}</td>
+    </tr>`;
+  }).join("");
+}
+
+window.openPost = function(idx) {
+  const p = allPosts[idx];
+  if (!p) return;
+  document.getElementById("m_title").textContent = p.topic || "—";
+  document.getElementById("m_time").textContent = p.timestamp
+    ? "🕐 " + new Date(p.timestamp).toLocaleString("th-TH") : "—";
+
+  const c = p.content || {};
+  const errs = p.errors || [];
+  const platLines = [];
+
+  for (const r of (p.results || [])) {
+    if (r.platform === "facebook") {
+      for (const pg of (r.pages || [])) {
+        const media = (pg.has_video || pg.ai_video) ? " · 🎬 VIDEO"
+                    : (pg.has_image || pg.ai_image) ? " · 🖼 IMAGE" : "";
+        platLines.push(`✅ FB ${FB_PAGE_NAMES[pg.page_id] || pg.page_id?.slice(-4)}${media}`);
+      }
+    } else if (["line","line_flex"].includes(r.platform)) {
+      platLines.push("✅ LINE Broadcast");
+    } else if (r.platform === "tiktok") {
+      platLines.push("✅ TikTok");
+    }
+  }
+
+  let body = "";
+  if (platLines.length) body += `
+    <div class="modal-sec">
+      <div class="modal-sec-title">📡 Posted to (${platLines.length})</div>
+      <div class="modal-text-box">${esc(platLines.join("\n"))}</div>
+    </div>`;
+  if (errs.length) body += `
+    <div class="modal-sec">
+      <div class="modal-sec-title" style="color:var(--red)">❌ Errors</div>
+      ${errs.map(e => `<div class="modal-err">${esc(e)}</div>`).join("")}
+    </div>`;
+  if (c.facebook_post) body += `
+    <div class="modal-sec">
+      <div class="modal-sec-title"><svg class="icon" width="11" height="11" style="color:var(--fb)"><use href="#ic-fb"/></svg> Facebook Content</div>
+      <div class="modal-text-box">${esc(c.facebook_post)}</div>
+    </div>`;
+  if (c.line_message) body += `
+    <div class="modal-sec">
+      <div class="modal-sec-title"><svg class="icon" width="11" height="11" style="color:var(--line)"><use href="#ic-line"/></svg> LINE Message</div>
+      <div class="modal-text-box">${esc(c.line_message)}</div>
+    </div>`;
+  if (c.tiktok_script) body += `
+    <div class="modal-sec">
+      <div class="modal-sec-title"><svg class="icon" width="11" height="11" style="color:var(--tiktok)"><use href="#ic-tt"/></svg> TikTok Script</div>
+      <div class="modal-text-box">${esc(c.tiktok_script)}</div>
+    </div>`;
+  if (c.hashtags?.length) body += `
+    <div class="modal-sec">
+      <div class="modal-sec-title">🏷 Hashtags</div>
+      <div>${c.hashtags.map(h => `<span class="badge-soft" style="margin-right:4px">${esc(h)}</span>`).join("")}</div>
+    </div>`;
+
+  document.getElementById("m_body").innerHTML = body || `<div class="empty">ไม่มีรายละเอียดเพิ่มเติม</div>`;
+  document.getElementById("modal").classList.add("open");
+};
+window.closeModal = () => document.getElementById("modal").classList.remove("open");
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+</script>
+</body>
+</html>
