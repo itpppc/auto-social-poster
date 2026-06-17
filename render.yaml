@@ -1,0 +1,64 @@
+services:
+  - type: cron
+    name: tonai-auto-poster
+    runtime: python
+    schedule: "0 1,3,5,7,9,11,13,15 * * *"   # UTC = ไทย 08,10,12,14,16,18,20,22
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      pip install firebase-admin
+    startCommand: |
+      python main.py --now
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+      - key: FACEBOOK_PAGE_ID
+        sync: false
+      - key: FACEBOOK_ACCESS_TOKEN
+        sync: false
+      - key: FACEBOOK_PAGES
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: CONTENT_NICHE
+        sync: false
+      - key: LINE_CONTENT_NICHE
+        sync: false
+      - key: POST_TIMES
+        value: "08:00,10:00,12:00,14:00,16:00,18:00,20:00,22:00"
+      - key: ENABLE_FACEBOOK
+        value: "true"
+      - key: ENABLE_LINE
+        value: "true"
+      - key: ENABLE_TIKTOK
+        value: "false"
+
+  - type: cron
+    name: tonai-manual-watcher
+    runtime: python
+    schedule: "*/5 * * * *"   # ทุก 5 นาที
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      pip install firebase-admin
+    startCommand: |
+      python -c "
+      import os
+      from dotenv import load_dotenv
+      load_dotenv()
+      from config import Config
+      from content_generator import ContentGenerator
+      import manual_watcher, firestore_sync as fs
+      if fs._init():
+          db = fs._db
+          data = db.reference('manual_queue').get() or {}
+          pending = [(k,v) for k,v in data.items() if isinstance(v,dict) and v.get('status')=='pending']
+          if pending:
+              config = Config(); gen = ContentGenerator(config)
+              for pid, item in pending:
+                  manual_watcher.process_manual_post(pid, item, config, gen)
+      "
+    envVars:
+      - fromGroup: tonai-secrets
