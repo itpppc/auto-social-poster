@@ -50,17 +50,35 @@ class ContentGenerator:
         logger.info(f"Topic source: {idea.source} | {idea.title} | niche: {active_niche}")
         prompt = self._build_prompt(idea, active_niche)
 
-        response = self.client.models.generate_content(
-            model="gemini-2.5-flash-lite",   # 1,500 req/วัน free (เทียบกับ 2.5 = 20)
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.85,
-                max_output_tokens=4096,
-                response_mime_type="application/json",
-            ),
-        )
-
-        return self._parse_response(response.text, idea)
+        # ลอง 3 models ตามลำดับ + retry
+        import time as _time
+        MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+        last_error = None
+        for model in MODELS:
+            for attempt in range(3):
+                try:
+                    response = self.client.models.generate_content(
+                        model=model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=0.85,
+                            max_output_tokens=4096,
+                            response_mime_type="application/json",
+                        ),
+                    )
+                    logger.info(f"Generated with {model} (attempt {attempt+1})")
+                    return self._parse_response(response.text, idea)
+                except Exception as e:
+                    last_error = e
+                    code = str(e)
+                    if "503" in code or "UNAVAILABLE" in code or "429" in code:
+                        wait = 2 ** attempt
+                        logger.warning(f"{model} busy, retry in {wait}s")
+                        _time.sleep(wait)
+                    else:
+                        break  # error อื่นๆ ไม่ต้อง retry model นี้
+            logger.warning(f"{model} failed all retries, trying next model")
+        raise last_error or Exception("All models failed")
 
     def _build_prompt(self, idea: TopicIdea, niche: Optional[str] = None) -> str:
         active_niche = niche or self.config.content_niche
