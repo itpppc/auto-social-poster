@@ -50,6 +50,16 @@ class AutoPosterWorkflow:
             from image_finder import ImageFinder
             self.image_finder = ImageFinder(config.pexels_api_key)
 
+        # AI Image Generator (Pollinations.ai — ฟรี ไม่ต้อง key)
+        self.ai_image = None
+        if config.gemini_api_key:
+            try:
+                from gemini_image_generator import GeminiImageGenerator
+                self.ai_image = GeminiImageGenerator(config.gemini_api_key)
+                logger.info("AI Image Generator enabled (Pollinations.ai)")
+            except Exception as e:
+                logger.warning(f"AI image gen failed to init: {e}")
+
         self.log_dir = Path("post_logs")
         self.log_dir.mkdir(exist_ok=True)
 
@@ -217,17 +227,34 @@ class AutoPosterWorkflow:
                 hashtags_str = " ".join(pc.hashtags)
                 full_text    = f"{pc.facebook_post}\n\n{hashtags_str}"
 
+                # ลำดับความสำคัญ: 1) AI gen image (ตรงเนื้อหา) → 2) Pexels stock → 3) text only
+                ai_image_path = None
+                if self.ai_image:
+                    try:
+                        ai_image_path = self.ai_image.generate_for_post(
+                            topic=pc.topic, niche=page_niche,
+                            content_summary=pc.facebook_post[:200],
+                        )
+                    except Exception as e:
+                        logger.warning(f"AI image gen failed for page {page_id[-4:]}: {e}")
+
                 image_url = None
-                if self.fb.image_finder and self.generator:
+                if not ai_image_path and self.fb.image_finder and self.generator:
                     query = self.generator.get_image_query(pc.topic, page_niche)
                     image_url = self.fb.image_finder.search(query)
 
-                if image_url:
+                if ai_image_path:
+                    post_id = self._fb_post_local_image(page_id, token, full_text, ai_image_path)
+                    has_image = True
+                elif image_url:
                     post_id = self.fb._post_with_photo(page_id, token, full_text, image_url)
+                    has_image = True
                 else:
                     post_id = self.fb._post_feed(page_id, token, full_text)
+                    has_image = False
 
-                results.append({"page_id": page_id, "post_id": post_id, "niche": page_niche, "has_image": image_url is not None})
+                results.append({"page_id": page_id, "post_id": post_id, "niche": page_niche,
+                                "has_image": has_image, "ai_image": ai_image_path is not None})
                 st.update_facebook_status(page_id, "success")
             except Exception as e:
                 err = str(e)
@@ -239,6 +266,20 @@ class AutoPosterWorkflow:
             result.results.append({"platform": "facebook", "pages": results, "errors": errors})
         if errors and not results:
             result.errors.append(f"Facebook: {errors[0]}")
+
+    def _fb_post_local_image(self, page_id: str, token: str, caption: str, image_path: str) -> str:
+        """อัปโหลดรูปท้องถิ่น (AI generated) → Facebook Page"""
+        import requests
+        with open(image_path, "rb") as f:
+            r = requests.post(
+                f"https://graph.facebook.com/v21.0/{page_id}/photos",
+                files={"source": f},
+                data={"caption": caption, "access_token": token}, timeout=60,
+            )
+        j = r.json()
+        if "error" in j:
+            raise Exception(j["error"].get("message", str(j["error"])))
+        return j.get("post_id") or j.get("id", "")
 
     # ──────────────────────────────────────────────────────
     def _post_to_platform(self, platform: str, post_fn, result: PostResult):
