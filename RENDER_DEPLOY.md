@@ -24,9 +24,9 @@ Render จะอ่าน `render.yaml` ที่เตรียมไว้ →
 
 | Key | Value (จาก .env) |
 |-----|------|
-| `GEMINI_API_KEY` | AIzaSyCRgR4o_UvE817WrLnVTWwHO8nKzW1Pw9g |
-| `PEXELS_API_KEY` | VasonZ0SAb2WRhh0MHuh8eLEp0eF1Q2LXgyEWDPSApk18Rqn2TH31olZ |
-| `FACEBOOK_PAGE_ID` | 466917400080770 |
+| `GEMINI_API_KEY` | (ดูจาก .env ในเครื่อง) |
+| `PEXELS_API_KEY` | (ดูจาก .env ในเครื่อง) |
+| `FACEBOOK_PAGE_ID` | (ดูจาก .env ในเครื่อง) |
 | `FACEBOOK_ACCESS_TOKEN` | (ค่ายาวๆจาก .env) |
 | `FACEBOOK_PAGES` | (ค่ายาวๆ 1227 chars จาก .env) |
 | `LINE_CHANNEL_ACCESS_TOKEN` | (จาก .env) |
