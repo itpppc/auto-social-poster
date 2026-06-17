@@ -35,46 +35,64 @@ class GeminiImageGenerator:
             self._client = genai.Client(api_key=self.api_key)
         return self._client
 
+    def _fallback_prompt(self, topic: str, niche: str) -> str:
+        """สร้าง prompt ตรงๆ จาก niche/topic — ไม่ต้องใช้ Gemini"""
+        # Map Thai niches → English visual themes
+        n = (niche or "").lower()
+        if any(k in n for k in ["smart factory", "iot", "oee", "industry", "โรงงาน", "ฟาร์ม"]):
+            scene = "modern smart factory floor with IoT sensors and digital OEE dashboard screens"
+        elif any(k in n for k in ["cctv", "ai", "surveillance"]):
+            scene = "professional control room with multiple CCTV monitor screens and AI detection overlays"
+        elif any(k in n for k in ["network", "server", "cybersecurity"]):
+            scene = "modern data center with server racks, network equipment, blue LED lighting"
+        elif any(k in n for k in ["social media", "marketing", "facebook ads"]):
+            scene = "social media marketing dashboard on laptop screen with analytics graphs going up"
+        elif any(k in n for k in ["อาหาร", "ทะเล", "ขนมจีน", "สลัด", "ออร์แกนิค"]):
+            scene = "premium Thai food photography, delicious freshly prepared dish on rustic wooden table"
+        elif any(k in n for k in ["ไอที", "คอมพิวเตอร์", "โน๊ตบุ๊ค"]):
+            scene = "professional workspace with modern laptops, IT equipment, clean tech aesthetic"
+        else:
+            scene = f"professional business scene related to {niche[:60]}"
+
+        return (f"{scene}, photorealistic commercial photography, "
+                f"vibrant lighting, blue and orange accent colors, "
+                f"shallow depth of field, 16:9 composition, high quality, no text, no logos")
+
     def generate_prompt(self, topic: str, niche: str, content_summary: str = "") -> str:
-        """ให้ Gemini ออกแบบ prompt รูปสำหรับ business นี้"""
+        """พยายามให้ Gemini ทำ prompt ก่อน — fallback ถ้า quota หมด"""
         from google.genai import types
 
-        meta = f"""You are an expert ad designer.
-Create a SHORT (max 60 words) English image generation prompt for a Facebook/LINE marketing post.
-
+        meta = f"""Create a SHORT (max 50 words) English image generation prompt for a marketing post.
 Topic: {topic}
 Business: {niche}
-{f"Content gist: {content_summary[:150]}" if content_summary else ""}
 
-Image style requirements:
-- Photorealistic professional commercial photography
-- Real business scenarios (factory floor, IoT dashboards, smart office, control rooms)
-- Vibrant lighting, blue/orange/cyan accent colors
-- 16:9 ratio composition
-- NO text, NO logos, NO watermarks, NO people facing camera
+Style: photorealistic commercial photo, real business scenario (factory/IoT/dashboard/office), vibrant lighting, blue/orange/cyan accents, 16:9, NO text, NO logos.
 
-Reply with ONLY the prompt (no quotes, no explanation)."""
+Reply with the prompt ONLY."""
 
         MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
         for model in MODELS:
-            for attempt in range(2):
-                try:
-                    r = self._gemini().models.generate_content(
-                        model=model, contents=meta,
-                        config=types.GenerateContentConfig(temperature=0.6, max_output_tokens=200),
-                    )
-                    prompt = r.text.strip().strip('"').strip("'")
-                    logger.info(f"Image prompt ({model}): {prompt[:100]}...")
-                    return prompt
-                except Exception as e:
-                    if "503" in str(e) or "429" in str(e):
-                        time.sleep(1 + attempt)
-                    else:
-                        break
+            try:
+                r = self._gemini().models.generate_content(
+                    model=model, contents=meta,
+                    config=types.GenerateContentConfig(temperature=0.6, max_output_tokens=150),
+                )
+                prompt = r.text.strip().strip('"').strip("'")
+                logger.info(f"Image prompt ({model}): {prompt[:80]}")
+                return prompt
+            except Exception as e:
+                err = str(e)
+                if "429" in err or "quota" in err.lower() or "RESOURCE_EXHAUSTED" in err:
+                    logger.info(f"Gemini quota exceeded → use fallback prompt")
+                    break  # ข้าม model อื่นเลย เพราะทุก model share quota
+                elif "503" in err:
+                    continue  # ลอง model ถัดไป
+                else:
+                    break
 
-        # Fallback prompt
-        return (f"Professional commercial photo of {niche}, modern industrial scene, "
-                f"vibrant blue and orange accents, photorealistic, high quality")
+        fallback = self._fallback_prompt(topic, niche)
+        logger.info(f"Fallback prompt: {fallback[:80]}")
+        return fallback
 
     def generate_image(self, prompt: str, output_path: Optional[str] = None,
                        width: int = 1280, height: int = 720) -> Optional[str]:
