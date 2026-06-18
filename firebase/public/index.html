@@ -237,14 +237,50 @@
     padding: 14px 18px; border-bottom: 1px solid rgba(99,102,241,.06);
     font-size: 13px; vertical-align: middle;
   }
-  .ptbl tbody tr { transition: background .2s; cursor: pointer; }
-  .ptbl tbody tr:hover { background: rgba(99,102,241,.05); }
+  .ptbl tbody tr.head-row { transition: background .2s; cursor: pointer; }
+  .ptbl tbody tr.head-row:hover { background: rgba(99,102,241,.05); }
+  .ptbl tbody tr.head-row.expanded { background: rgba(99,102,241,.08); }
   .topic-cell { max-width: 380px; }
   .topic-text {
     font-weight: 500;
-    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
-  .topic-source { font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .topic-source { font-size: 10px; color: var(--muted); margin-top: 3px; display: flex; align-items: center; gap: 4px; }
+  .expand-icon { transition: transform .3s; display: inline-block; color: var(--muted); margin-right: 4px; }
+  .head-row.expanded .expand-icon { transform: rotate(90deg); color: var(--accent); }
+
+  /* expanded content rows */
+  .content-row { display: none; }
+  .content-row.shown { display: table-row; }
+  .content-row td { padding: 0 !important; background: rgba(99,102,241,.04); border-bottom: 1px solid var(--border) !important; }
+  .content-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+    padding: 14px 18px;
+  }
+  @media (max-width: 900px) { .content-grid { grid-template-columns: 1fr; } }
+  .content-card {
+    background: var(--card-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; min-width: 0;
+  }
+  .content-card-head {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .content-card-head.fb { color: #60a5fa; }
+  .content-card-head.line { color: #34d399; }
+  .content-card-head.tt { color: #fb7185; }
+  .content-card-text {
+    font-size: 12px; line-height: 1.55; color: var(--text-dim);
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 200px; overflow-y: auto;
+  }
+  .content-card-text.short { max-height: 140px; }
+  .content-tags { padding: 0 18px 14px; }
+  .content-tag {
+    display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px;
+    background: rgba(99,102,241,.1); color: #a5b4fc; margin-right: 4px; margin-bottom: 3px;
+  }
   .time-cell { font-size: 12px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .chip { display: inline-flex; align-items: center; gap: 4px;
     padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700;
@@ -978,9 +1014,9 @@ function renderPosts() {
       if (r.platform === "facebook") {
         for (const pg of (r.pages || [])) {
           let media = "";
-          if (pg.has_video || pg.ai_video) media = '<svg class="icon" width="10" height="10" style="margin-left:3px"><use href="#ic-chart"/></svg>VIDEO';
-          else if (pg.has_image || pg.ai_image) media = '🖼';
-          chips.push(`<span class="chip chip-fb">FB · ${esc(FB_PAGE_NAMES[pg.page_id] || pg.page_id?.slice(-4))} ${media}</span>`);
+          if (pg.has_video || pg.ai_video) media = ' 🎬';
+          else if (pg.has_image || pg.ai_image) media = ' 🖼';
+          chips.push(`<span class="chip chip-fb">FB · ${esc(FB_PAGE_NAMES[pg.page_id] || pg.page_id?.slice(-4))}${media}</span>`);
         }
       } else if (["line","line_flex"].includes(r.platform)) {
         chips.push(`<span class="chip chip-line">LINE</span>`);
@@ -989,16 +1025,66 @@ function renderPosts() {
       }
     }
     if ((p.error_count || 0) > 0) chips.push(`<span class="chip chip-err">${p.error_count} err</span>`);
-    return `<tr onclick="openPost(${idx})">
-      <td class="time-cell">${esc(t)}</td>
+
+    const c = p.content || {};
+    const cards = [];
+    if (c.facebook_post) cards.push(`
+      <div class="content-card">
+        <div class="content-card-head fb">
+          <svg class="icon" width="12" height="12"><use href="#ic-fb"/></svg> Facebook
+        </div>
+        <div class="content-card-text">${esc(c.facebook_post)}</div>
+      </div>`);
+    if (c.line_message) cards.push(`
+      <div class="content-card">
+        <div class="content-card-head line">
+          <svg class="icon" width="12" height="12"><use href="#ic-line"/></svg> LINE
+        </div>
+        <div class="content-card-text short">${esc(c.line_message)}</div>
+      </div>`);
+    if (c.tiktok_script) cards.push(`
+      <div class="content-card">
+        <div class="content-card-head tt">
+          <svg class="icon" width="12" height="12"><use href="#ic-tt"/></svg> TikTok
+        </div>
+        <div class="content-card-text short">${esc(c.tiktok_script)}</div>
+      </div>`);
+
+    const tagsHtml = (c.hashtags?.length)
+      ? `<div class="content-tags">${c.hashtags.map(h => `<span class="content-tag">${esc(h)}</span>`).join("")}</div>`
+      : "";
+
+    const errs = (p.errors || []);
+    const errHtml = errs.length
+      ? `<div style="padding:0 18px 14px"><div style="font-size:10px;color:var(--red);font-weight:700;margin-bottom:4px">❌ ERRORS</div>${errs.map(e => `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);padding:8px 10px;border-radius:6px;color:#fca5a5;font-size:11px;font-family:'JetBrains Mono';word-break:break-all;margin-bottom:4px">${esc(e)}</div>`).join("")}</div>`
+      : "";
+
+    return `
+    <tr class="head-row" onclick="toggleRow(${idx})">
+      <td class="time-cell"><span class="expand-icon">▶</span>${esc(t)}</td>
       <td class="topic-cell">
         <div class="topic-text" title="${esc(p.topic)}">${esc(p.topic || "—")}</div>
-        ${p.content?.source ? `<div class="topic-source">📡 ${esc(p.content.source)}</div>` : ""}
+        ${c.source ? `<div class="topic-source">📡 ${esc(c.source)}</div>` : ""}
       </td>
       <td>${chips.join("") || '<span style="color:var(--muted);font-size:11px">—</span>'}</td>
+    </tr>
+    <tr class="content-row" id="content-${idx}">
+      <td colspan="3">
+        ${cards.length ? `<div class="content-grid">${cards.join("")}</div>` : ""}
+        ${tagsHtml}
+        ${errHtml}
+      </td>
     </tr>`;
   }).join("");
 }
+
+window.toggleRow = function(idx) {
+  const head = document.querySelectorAll(".head-row")[idx];
+  const content = document.getElementById(`content-${idx}`);
+  if (!head || !content) return;
+  head.classList.toggle("expanded");
+  content.classList.toggle("shown");
+};
 
 window.openPost = function(idx) {
   const p = allPosts[idx];
