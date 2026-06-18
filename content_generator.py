@@ -55,7 +55,7 @@ class ContentGenerator:
         MODELS = ["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
         last_error = None
         for model in MODELS:
-            for attempt in range(3):
+            for attempt in range(2):
                 try:
                     response = self.client.models.generate_content(
                         model=model,
@@ -71,14 +71,30 @@ class ContentGenerator:
                 except Exception as e:
                     last_error = e
                     code = str(e)
-                    if "503" in code or "UNAVAILABLE" in code or "429" in code:
+                    if "429" in code or "quota" in code.lower() or "RESOURCE_EXHAUSTED" in code:
+                        # quota exhausted → skip all models, go to fallback
+                        logger.warning(f"{model} quota exhausted")
+                        break
+                    elif "503" in code or "UNAVAILABLE" in code:
                         wait = 2 ** attempt
                         logger.warning(f"{model} busy, retry in {wait}s")
                         _time.sleep(wait)
                     else:
-                        break  # error อื่นๆ ไม่ต้อง retry model นี้
-            logger.warning(f"{model} failed all retries, trying next model")
-        raise last_error or Exception("All models failed")
+                        break
+
+        # Gemini ทุก model ล้ม → ใช้ template fallback
+        logger.warning(f"All Gemini models failed → using template fallback")
+        from content_templates import get_fallback_content
+        data = get_fallback_content(idea.title, active_niche)
+        return GeneratedContent(
+            topic=idea.title,
+            source=idea.source + " (template-fallback)",
+            facebook_post=data["facebook_post"],
+            line_message=data["line_message"],
+            tiktok_script=data["tiktok_script"],
+            hashtags=data["hashtags"],
+            call_to_action=data["call_to_action"],
+        )
 
     def _build_prompt(self, idea: TopicIdea, niche: Optional[str] = None) -> str:
         active_niche = niche or self.config.content_niche
