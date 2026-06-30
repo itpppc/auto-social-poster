@@ -122,31 +122,81 @@ Reply with the prompt ONLY."""
         logger.info(f"Fallback prompt: {fallback[:100]}")
         return fallback
 
+    # Quality boosters แยกตามประเภทรูป
+    QUALITY_BOOSTERS = {
+        "photo": ("photorealistic commercial advertising photography, "
+                  "shot on Hasselblad H6D 85mm f/1.8, golden hour lighting, "
+                  "cinematic depth of field, ultra detailed textures, "
+                  "professional color grading, premium magazine quality, "
+                  "award-winning composition, hyper-realistic, 8K UHD, "
+                  "vibrant colors, soft bokeh, sharp focus"),
+        "illustration": ("modern premium vector illustration, SaaS aesthetic, "
+                         "vibrant gradient palette, clean lines, polished infographic, "
+                         "3D render with soft shadows, ultra detailed, "
+                         "trending on Behance and Dribbble, brand-quality design"),
+        "lifestyle": ("lifestyle commercial photography, candid authentic moment, "
+                      "natural soft window lighting, warm cinematic color grading, "
+                      "shallow depth of field, premium brand campaign aesthetic, "
+                      "magazine quality, professional retouching"),
+        "product": ("luxury product photography, studio lighting setup, "
+                    "clean minimal background, hero shot composition, "
+                    "ultra sharp focus, professional retouching, "
+                    "high-end commercial advertising, 8K UHD"),
+    }
+
+    NEGATIVE = ("blurry, low quality, distorted, deformed, watermark, text, logo, "
+                "signature, low resolution, jpeg artifacts, oversaturated, "
+                "amateur, bad anatomy, dull colors, ugly")
+
+    def _detect_style(self, prompt: str) -> str:
+        p = prompt.lower()
+        if any(k in p for k in ["illustration", "vector", "3d render", "isometric", "flat", "infographic", "cartoon"]):
+            return "illustration"
+        if any(k in p for k in ["product", "studio", "luxury", "hero shot", "packshot"]):
+            return "product"
+        if any(k in p for k in ["family", "people", "enjoying", "candid", "lifestyle", "person"]):
+            return "lifestyle"
+        return "photo"
+
     def generate_image(self, prompt: str, output_path: Optional[str] = None,
-                       width: int = 1280, height: int = 720) -> Optional[str]:
-        """Render รูปจาก prompt ผ่าน Pollinations.ai (ฟรี ไม่ต้อง key)"""
-        # Add quality modifiers
-        full_prompt = f"{prompt}, professional photography, cinematic lighting, sharp focus, 8k, commercial advertisement"
+                       width: int = 1920, height: int = 1080,
+                       model: str = "flux") -> Optional[str]:
+        """Render รูปจาก prompt ผ่าน Pollinations.ai (ฟรี ไม่ต้อง key)
+        model: flux | flux-realism | flux-anime | flux-3d | turbo
+        """
+        style = self._detect_style(prompt)
+        booster = self.QUALITY_BOOSTERS[style]
+        full_prompt = f"{prompt}, {booster}"
 
         seed = int(time.time()) % 100000
         url = (POLLINATIONS_BASE + quote(full_prompt)
-               + f"?width={width}&height={height}&seed={seed}&nologo=true&model=flux")
+               + f"?width={width}&height={height}&seed={seed}"
+               + f"&nologo=true&enhance=true&nofeed=true&model={model}"
+               + f"&negative_prompt={quote(self.NEGATIVE)}")
 
         try:
-            logger.info(f"Rendering via Pollinations.ai...")
+            logger.info(f"Rendering [{style}/{model}] {width}x{height} via Pollinations...")
             r = requests.get(url, timeout=120)
             if r.status_code != 200 or len(r.content) < 5000:
                 logger.warning(f"Pollinations status={r.status_code}, len={len(r.content)}")
+                # Try turbo as fallback
+                if model == "flux":
+                    return self.generate_image(prompt, output_path, width, height, model="turbo")
                 return None
 
-            from PIL import Image
+            from PIL import Image, ImageEnhance
             img = Image.open(io.BytesIO(r.content))
             if img.mode != "RGB":
                 img = img.convert("RGB")
 
+            # Post-process — เพิ่มความพรีเมียม
+            img = ImageEnhance.Contrast(img).enhance(1.08)
+            img = ImageEnhance.Color(img).enhance(1.12)
+            img = ImageEnhance.Sharpness(img).enhance(1.15)
+
             if not output_path:
                 output_path = str(Path(tempfile.gettempdir()) / f"ai_img_{int(time.time()*1000)}.jpg")
-            img.save(output_path, "JPEG", quality=88)
+            img.save(output_path, "JPEG", quality=92, optimize=True)
             logger.info(f"Image saved: {output_path} ({Path(output_path).stat().st_size//1024} KB)")
             return output_path
         except Exception as e:
