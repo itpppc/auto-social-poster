@@ -31,10 +31,24 @@ class LinePoster:
             "Content-Type": "application/json",
         }
 
+    def _clean_text(self, text: str) -> str:
+        """ล้าง control chars + invalid Unicode ที่ทำให้ LINE แสดงเป็นภาษาแปลก"""
+        if not text: return ""
+        import re
+        # 1. Strip control chars (เก็บ \n \r \t)
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+        # 2. Strip zero-width chars (ตัวล่องหน)
+        text = re.sub(r'[​-‏‪-‮⁠-⁯﻿]', '', text)
+        # 3. Normalize Unicode
+        import unicodedata
+        text = unicodedata.normalize('NFC', text)
+        return text.strip()
+
     def broadcast_text(self, text: str) -> dict:
         """Broadcast ข้อความ raw text"""
         if not self.token:
             raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
+        text = self._clean_text(text)
         payload = {"messages": [{"type": "text", "text": text[:5000]}]}
         r = requests.post(f"{API_BASE}/message/broadcast",
                           headers=self._headers(), json=payload, timeout=30)
@@ -45,14 +59,11 @@ class LinePoster:
     def broadcast_with_media(self, text: str, media_url: str,
                               media_type: str = "image",
                               preview_url: str = None) -> dict:
-        """Broadcast ข้อความ + รูป/วีดีโอ
-        media_type: 'image' | 'video'
-        media_url: public HTTPS URL
-        preview_url: thumbnail (จำเป็นถ้า video)
-        """
+        """Broadcast ข้อความ + รูป/วีดีโอ"""
         if not self.token:
             raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
 
+        text = self._clean_text(text)
         messages = []
         if text:
             messages.append({"type": "text", "text": text[:5000]})
@@ -83,7 +94,7 @@ class LinePoster:
             raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
 
         hashtags_str = " ".join(content.hashtags)
-        text = f"{content.line_message}\n\n{hashtags_str}\n\n{content.call_to_action}"
+        text = self._clean_text(f"{content.line_message}\n\n{hashtags_str}\n\n{content.call_to_action}")
 
         payload = {
             "messages": [{"type": "text", "text": text[:5000]}]
@@ -107,9 +118,15 @@ class LinePoster:
         if not self.token:
             raise ValueError("ต้องตั้งค่า LINE_CHANNEL_ACCESS_TOKEN ใน .env")
 
+        # Clean ทุก text field
+        topic = self._clean_text(content.topic)
+        line_msg = self._clean_text(content.line_message)
+        cta = self._clean_text(content.call_to_action)
+        hashtags = self._clean_text(" ".join(content.hashtags or []))
+
         flex_message = {
             "type": "flex",
-            "altText": content.topic,
+            "altText": topic[:400],
             "contents": {
                 "type": "bubble",
                 "size": "mega",
@@ -121,7 +138,7 @@ class LinePoster:
                     "contents": [
                         {
                             "type": "text",
-                            "text": content.topic,
+                            "text": topic[:200],
                             "color": "#FFFFFF",
                             "weight": "bold",
                             "size": "md",
@@ -136,7 +153,7 @@ class LinePoster:
                     "contents": [
                         {
                             "type": "text",
-                            "text": content.line_message[:2000],
+                            "text": line_msg[:2000],
                             "wrap": True,
                             "size": "sm",
                             "color": "#374151",
@@ -144,7 +161,7 @@ class LinePoster:
                         {"type": "separator"},
                         {
                             "type": "text",
-                            "text": " ".join(content.hashtags),
+                            "text": hashtags[:500],
                             "wrap": True,
                             "size": "xs",
                             "color": "#2563EB",
@@ -161,8 +178,8 @@ class LinePoster:
                             "color": "#1D4ED8",
                             "action": {
                                 "type": "message",
-                                "label": content.call_to_action[:20],
-                                "text": content.call_to_action[:20],
+                                "label": cta[:20],
+                                "text": cta[:20],
                             },
                         }
                     ],
