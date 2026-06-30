@@ -102,10 +102,29 @@ class ContentGenerator:
         if idea.keywords:
             keyword_hint = f"\nคำสำคัญที่ควรกล่าวถึง: {', '.join(idea.keywords)}"
 
+        # ─── Daily Offers Injection ──────────────────────────
+        # ถ้ามี offers.json → ใช้ contact/สินค้าจริง แทนของบริษัทหลัก
+        try:
+            import offers_loader
+            offer = offers_loader.get_offer_for_niche(active_niche)
+        except Exception:
+            offer = None
+
+        if offer:
+            offer_block = offers_loader.format_offer_for_prompt(offer)
+            contact = offer.get("contact") or {}
+            line_id = contact.get("line", "@itpppc")
+            phone   = contact.get("phone", "0909728573")
+            contact_line = f"ติดต่อ: LINE {line_id} · โทร {phone}"
+        else:
+            offer_block = ""
+            contact_line = "ติดต่อ: LINE @itpppc · โทร 0909728573 · เว็บ ton-ai-tech.web.app"
+
         return f"""คุณคือ Direct-Response Copywriter ระดับโลก เชี่ยวชาญด้าน "{active_niche}"
 ภารกิจ: เขียน content ขายของ/ปิดดีล/ดึงคนทักไลน์ปรึกษาทันที — ไม่ใช่แค่ engagement สวยๆ
 
-ติดต่อ: LINE @itpppc · โทร 0909728573 · เว็บ ton-ai-tech.web.app
+{contact_line}
+{offer_block}
 
 หัวข้อวันนี้: "{idea.title}"{keyword_hint}
 
@@ -140,14 +159,16 @@ A (Action): CTA ทรงพลัง กระตุ้นให้ทักไ
 }}
 
 ═══ กฎเข้ม ═══
-1. ทุกโพสต์ "ต้อง" มีตัวเลข — ผลประโยชน์/ปัญหา/สถิติ (%, ฿, ชั่วโมง, จำนวน)
-2. ทุกโพสต์ "ต้อง" มี contact ครบ: LINE @itpppc + โทร 0909728573 (ใน facebook_post)
-3. ทุกโพสต์ "ต้อง" จบด้วย CTA ที่บังคับ action (ทักไลน์/โทร/สั่ง demo)
-4. ใส่ "Risk reversal" — "Demo ฟรี" / "ปรึกษาฟรี" / "ดูจริงก่อนตัดสินใจ"
-5. ภาษาไทยธรรมชาติแบบเจ้าของกิจการคุย — มั่นใจ ตรง ไม่อ้อมค้อม
-6. หัวข้อต้องเชื่อมกับ "{active_niche}" — หา angle ที่ขายของให้ได้
-7. ห้าม: ขายเกินจริง · clickbait · เคลมที่พิสูจน์ไม่ได้
-8. Hashtags: 5 ตัวตรงสินค้า/บริการ + 3 ตัว trending/local (เช่น #กรุงเทพ #ผู้ประกอบการไทย)"""
+1. ทุกโพสต์ "ต้อง" มีตัวเลข — ราคา/ส่วนลด/จำนวน stock/% ประหยัด (สำคัญสุดถ้ามี offers ข้างบน)
+2. ทุกโพสต์ "ต้อง" มี contact ตามที่กำหนดข้างต้น (ห้ามใช้ contact อื่น)
+3. ทุกโพสต์ "ต้อง" จบด้วย CTA ที่บังคับ action (ทักไลน์/โทร/สั่งทันที)
+4. ใส่ Risk reversal: "ฟรี ค่าส่ง" / "เปลี่ยน/คืนได้" / "รับประกัน X วัน" (ใช้จากข้อมูล offers)
+5. ภาษาไทยธรรมชาติแบบเจ้าของร้านคุยกับลูกค้า — มั่นใจ ตรง ไม่อ้อมค้อม
+6. ถ้ามีรายการสินค้าด้านบน → "ต้อง" พูดถึงสินค้าจริงพร้อมราคา (อย่างน้อย 1-3 รายการ)
+   หัวข้อข่าวใช้เป็นแค่ "Hook" เปิดบทพูดเท่านั้น แล้วโยงเข้าสินค้าจริง
+7. ใส่ "Urgency": วันหมดเขต/stock เหลือน้อย/โปรพิเศษเฉพาะวันนี้
+8. ห้าม: ขายเกินจริง · clickbait · เคลมที่พิสูจน์ไม่ได้ · เพิ่มสินค้าที่ไม่อยู่ในรายการ
+9. Hashtags: 5 ตัวตรงสินค้า/บริการ + 3 ตัว trending/local (เช่น #กรุงเทพ #ของอร่อย)"""
 
     def get_image_query(self, topic: str, niche: str) -> str:
         """สร้าง English search query สำหรับค้นหารูปภาพ"""
@@ -179,14 +200,22 @@ A (Action): CTA ทรงพลัง กระตุ้นให้ทักไ
 
         data = self._robust_json_parse(json_str, idea)
 
+        # Sanitize text — ลบ control chars + zero-width chars (กัน LINE แสดงเพี้ยน)
+        def _clean(s):
+            if not isinstance(s, str): return s
+            import re as _re, unicodedata
+            s = _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', s)
+            s = _re.sub(r'[​-‏‪-‮⁠-⁯﻿]', '', s)
+            return unicodedata.normalize('NFC', s).strip()
+
         return GeneratedContent(
             topic=idea.title,
             source=idea.source,
-            facebook_post=data.get("facebook_post", ""),
-            line_message=data.get("line_message", ""),
-            tiktok_script=data.get("tiktok_script", ""),
-            hashtags=data.get("hashtags", []),
-            call_to_action=data.get("call_to_action", ""),
+            facebook_post=_clean(data.get("facebook_post", "")),
+            line_message=_clean(data.get("line_message", "")),
+            tiktok_script=_clean(data.get("tiktok_script", "")),
+            hashtags=[_clean(h) for h in data.get("hashtags", []) if h],
+            call_to_action=_clean(data.get("call_to_action", "")),
         )
 
     def _robust_json_parse(self, json_str: str, idea: "TopicIdea") -> dict:

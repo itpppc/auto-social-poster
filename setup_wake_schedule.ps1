@@ -1,129 +1,124 @@
-# ═══════════════════════════════════════════════════════════
-# Ton.AI Wake-on-Schedule Setup
-# ตั้งให้ PC ตื่นเอง → โพสต์ → ปิดเอง อัตโนมัติ
-# รัน: powershell -ExecutionPolicy Bypass -File setup_wake_schedule.ps1
-# ═══════════════════════════════════════════════════════════
+#Requires -RunAsAdministrator
+# Ton.AI Wake-on-Schedule Setup (using schtasks.exe - more reliable)
 
-$ErrorActionPreference = "Stop"
-
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
-    Write-Host "[!] ต้องรันใน PowerShell as Administrator" -ForegroundColor Red
-    Write-Host "    คลิกขวาที่ PowerShell → Run as Administrator → รันใหม่"
-    exit 1
-}
+$ErrorActionPreference = "Continue"
 
 Write-Host ""
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  Ton.AI — Wake-on-Schedule Setup" -ForegroundColor Cyan
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "===============================================" -ForegroundColor Cyan
+Write-Host "  Ton.AI Wake-on-Schedule Setup" -ForegroundColor Cyan
+Write-Host "===============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Post times in Thai time (Bangkok)
-$POST_TIMES = @("06:55", "11:55", "17:55")  # โพสต์ 3 รอบ: 07:00, 12:00, 18:00
-$SHUTDOWN_AFTER_MIN = 10  # นาทีหลังจาก wake → shutdown
-
+$POST_TIMES = @("06:55", "11:55", "17:55")
 $PYTHON = "F:\ProjectAI\auto_poster\venv\Scripts\python.exe"
 $SCRIPT = "F:\ProjectAI\auto_poster\main.py"
+$WORKDIR = "F:\ProjectAI\auto_poster"
 
-# ─── 1. ลบ tasks เก่า ────────────────────────────────────────
-Write-Host "[1] ลบ scheduled tasks เก่า..." -ForegroundColor Yellow
-$existingTasks = @("TonAI-Wake", "TonAI-Post", "TonAI-Shutdown")
-foreach ($n in $existingTasks) {
-    Get-ScheduledTask -TaskName "$n*" -ErrorAction SilentlyContinue | ForEach-Object {
-        Unregister-ScheduledTask -TaskName $_.TaskName -Confirm:$false
-        Write-Host "    Removed: $($_.TaskName)" -ForegroundColor Gray
+# 1. Remove old tasks
+Write-Host "[1] Removing old TonAI tasks..." -ForegroundColor Yellow
+schtasks.exe /query /fo csv 2>$null | Select-String "TonAI-" | ForEach-Object {
+    $name = ($_ -split ',')[0].Trim('"').Trim('\')
+    schtasks.exe /delete /tn $name /f 2>&1 | Out-Null
+    Write-Host "    Removed: $name" -ForegroundColor Gray
+}
+
+# 2. Create POST tasks with wake-to-run
+Write-Host ""
+Write-Host "[2] Creating wake + post tasks..." -ForegroundColor Yellow
+
+foreach ($time in $POST_TIMES) {
+    $safeName = $time.Replace(":", "")  # 06:55 -> 0655 (colons not allowed in task names)
+    $taskName = "TonAI-Post-$safeName"
+    $cmd = "`"$PYTHON`" `"$SCRIPT`" --now"
+
+    # /sc DAILY /st <time> /ru <user> /rl HIGHEST
+    $output = schtasks.exe /create /tn $taskName /tr $cmd /sc DAILY /st $time `
+        /rl HIGHEST /ru "$env:USERNAME" /f 2>&1
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "    Created: $taskName at $time" -ForegroundColor Green
+
+        # Enable Wake-to-Run via XML modification
+        $xml = schtasks.exe /query /tn $taskName /xml 2>&1
+        if ($xml) {
+            $xmlStr = ($xml -join "`n")
+            # Add WakeToRun if not present
+            if ($xmlStr -notmatch "<WakeToRun>") {
+                $xmlStr = $xmlStr -replace "(<Settings>)", "`$1`n    <WakeToRun>true</WakeToRun>"
+            } else {
+                $xmlStr = $xmlStr -replace "<WakeToRun>false</WakeToRun>", "<WakeToRun>true</WakeToRun>"
+            }
+            # Also ensure starts when available
+            if ($xmlStr -notmatch "<StartWhenAvailable>") {
+                $xmlStr = $xmlStr -replace "(<Settings>)", "`$1`n    <StartWhenAvailable>true</StartWhenAvailable>"
+            }
+            # Save modified XML
+            $tmpXml = "$env:TEMP\$taskName.xml"
+            [System.IO.File]::WriteAllText($tmpXml, $xmlStr, [System.Text.Encoding]::Unicode)
+            schtasks.exe /delete /tn $taskName /f 2>&1 | Out-Null
+            schtasks.exe /create /tn $taskName /xml $tmpXml /ru "$env:USERNAME" 2>&1 | Out-Null
+            Remove-Item $tmpXml -ErrorAction SilentlyContinue
+        }
+    } else {
+        Write-Host "    FAIL $taskName : $output" -ForegroundColor Red
     }
 }
 
-# ─── 2. สร้าง Wake + Post tasks ──────────────────────────────
+# 3. Create SHUTDOWN tasks (10 min after wake)
 Write-Host ""
-Write-Host "[2] สร้าง wake + post tasks ทุก 2 ชม. ..." -ForegroundColor Yellow
+Write-Host "[3] Creating shutdown tasks..." -ForegroundColor Yellow
 
 foreach ($time in $POST_TIMES) {
-    $taskName = "TonAI-Post-$time"
-    $trigger = New-ScheduledTaskTrigger -Daily -At $time
-    $trigger.Repetition = $null
+    $wakeTime = [DateTime]::ParseExact($time, "HH:mm", $null)
+    $shutdownTime = $wakeTime.AddMinutes(10).ToString("HH:mm")
+    $safeShutdown = $shutdownTime.Replace(":", "")
+    $taskName = "TonAI-Shutdown-$safeShutdown"
 
-    # Wake the computer to run this task
-    $settings = New-ScheduledTaskSettingsSet `
-        -WakeToRun `
-        -StartWhenAvailable `
-        -DontStopOnIdleEnd `
-        -AllowStartIfOnBatteries `
-        -DontStopIfGoingOnBatteries `
-        -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+    schtasks.exe /create /tn $taskName `
+        /tr "shutdown.exe /s /t 30 /c `"Ton.AI auto shutdown`"" `
+        /sc DAILY /st $shutdownTime /rl HIGHEST /ru "$env:USERNAME" /f 2>&1 | Out-Null
 
-    $action = New-ScheduledTaskAction `
-        -Execute $PYTHON `
-        -Argument "$SCRIPT --now" `
-        -WorkingDirectory "F:\ProjectAI\auto_poster"
-
-    # S4U principal — runs without login
-    $principal = New-ScheduledTaskPrincipal `
-        -UserId "$env:USERDOMAIN\$env:USERNAME" `
-        -LogonType S4U `
-        -RunLevel Highest
-
-    Register-ScheduledTask `
-        -TaskName $taskName `
-        -Trigger $trigger `
-        -Settings $settings `
-        -Action $action `
-        -Principal $principal `
-        -Description "Ton.AI Auto Post at $time (wakes PC)" `
-        -Force | Out-Null
-
-    Write-Host "    Created: $taskName" -ForegroundColor Green
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "    Created: $taskName at $shutdownTime" -ForegroundColor Green
+    } else {
+        Write-Host "    FAIL $taskName" -ForegroundColor Red
+    }
 }
 
-# ─── 3. สร้าง Shutdown task (10 นาทีหลัง wake) ──────────────
+# 4. Enable wake timers in power plan
 Write-Host ""
-Write-Host "[3] สร้าง shutdown tasks (10 นาทีหลัง wake)..." -ForegroundColor Yellow
-
-foreach ($time in $POST_TIMES) {
-    $shutdownTime = (Get-Date $time).AddMinutes($SHUTDOWN_AFTER_MIN).ToString("HH:mm")
-    $taskName = "TonAI-Shutdown-$shutdownTime"
-    $trigger = New-ScheduledTaskTrigger -Daily -At $shutdownTime
-    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries
-    $action = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument "/s /t 30 /c `"Ton.AI auto shutdown after post`""
-    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Highest
-
-    Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Settings $settings -Action $action -Principal $principal -Force | Out-Null
-    Write-Host "    Created: $taskName" -ForegroundColor Green
-}
-
-# ─── 4. ตั้ง Power options ───────────────────────────────────
-Write-Host ""
-Write-Host "[4] ตั้งค่า BIOS Power options..." -ForegroundColor Yellow
-
-# Enable wake timers
+Write-Host "[4] Enabling Wake Timers in power plan..." -ForegroundColor Yellow
 powercfg /SETACVALUEINDEX SCHEME_CURRENT SUB_SLEEP RTCWAKE 1 2>&1 | Out-Null
 powercfg /SETDCVALUEINDEX SCHEME_CURRENT SUB_SLEEP RTCWAKE 1 2>&1 | Out-Null
 powercfg /SETACTIVE SCHEME_CURRENT
-Write-Host "    Wake timers: ENABLED" -ForegroundColor Green
+Write-Host "    Wake Timers: ENABLED" -ForegroundColor Green
 
-# ─── 5. สรุป ────────────────────────────────────────────────
+# 5. Show created tasks
 Write-Host ""
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
-Write-Host "  ✅ Setup เสร็จสมบูรณ์!" -ForegroundColor Green
-Write-Host "════════════════════════════════════════════════════════" -ForegroundColor Green
+Write-Host "[5] Verifying tasks..." -ForegroundColor Yellow
+schtasks.exe /query /fo TABLE /nh 2>$null | Select-String "TonAI-" | ForEach-Object {
+    Write-Host "    $_" -ForegroundColor White
+}
+
+# 6. Summary
 Write-Host ""
-Write-Host "📅 ตารางทำงาน (เวลาไทย):" -ForegroundColor Cyan
+Write-Host "===============================================" -ForegroundColor Green
+Write-Host "  SETUP COMPLETE!" -ForegroundColor Green
+Write-Host "===============================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "Schedule (Bangkok time):" -ForegroundColor Cyan
 foreach ($time in $POST_TIMES) {
-    $shutdown = (Get-Date $time).AddMinutes($SHUTDOWN_AFTER_MIN).ToString("HH:mm")
-    Write-Host "    🌅 $time น. → ตื่น → โพสต์ → 🌙 $shutdown น. ปิดเอง" -ForegroundColor White
+    $wakeTime = [DateTime]::ParseExact($time, "HH:mm", $null)
+    $postTime = $wakeTime.AddMinutes(5).ToString("HH:mm")
+    $shutdownTime = $wakeTime.AddMinutes(10).ToString("HH:mm")
+    Write-Host "    Wake $time -> Post $postTime -> Shutdown $shutdownTime" -ForegroundColor White
 }
 Write-Host ""
-Write-Host "🔋 ประมาณการค่าไฟ:" -ForegroundColor Cyan
-Write-Host "    เปิดแค่ 8 × 10 นาที = 80 นาที/วัน" -ForegroundColor White
-Write-Host "    ค่าไฟประมาณ ฿20-30/เดือน (ถูกกว่าเปิด 24 ชม. ~5 เท่า)" -ForegroundColor White
+Write-Host "Power usage: ~30 min/day (vs 24h)" -ForegroundColor Cyan
+Write-Host "Electricity cost: ~15-25 baht/month" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "📌 ขั้นตอนสุดท้าย:" -ForegroundColor Yellow
-Write-Host "    1. ปิดคอม (Shutdown ปกติ — ไม่ใช่ Sleep)"
-Write-Host "    2. ตรวจ BIOS Settings → Wake on RTC = Enabled"
-Write-Host "       (ส่วนมาก default เปิดอยู่)"
-Write-Host "    3. ที่ 07:55 น. PC จะตื่นเอง → โพสต์ → ปิดเอง"
-Write-Host ""
-Write-Host "🔍 ดู scheduled tasks:" -ForegroundColor Yellow
-Write-Host '    Get-ScheduledTask -TaskName "TonAI-*"' -ForegroundColor Gray
+Write-Host "Next steps:" -ForegroundColor Yellow
+Write-Host "  1. Enable BIOS 'Wake on RTC' (Restart -> press Del/F2 during boot)"
+Write-Host "  2. Shutdown PC normally"
+Write-Host "  3. PC will wake at 06:55 and post automatically"
 Write-Host ""

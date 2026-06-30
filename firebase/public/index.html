@@ -243,6 +243,35 @@
   .ptbl tbody tr.head-row { transition: background .2s; cursor: pointer; }
   .ptbl tbody tr.head-row:hover { background: rgba(99,102,241,.05); }
   .ptbl tbody tr.head-row.expanded { background: rgba(99,102,241,.08); }
+
+  /* Strikethrough — posts ที่โพสต์เสร็จแล้ว */
+  .ptbl tbody tr.head-row.posted .topic-text {
+    text-decoration: line-through;
+    text-decoration-color: #34d399;
+    text-decoration-thickness: 2px;
+    opacity: 0.65;
+  }
+  .ptbl tbody tr.head-row.posted .time-cell {
+    color: var(--green);
+    font-weight: 700;
+  }
+  .ptbl tbody tr.head-row.posted .time-cell::before {
+    content: "✓ ";
+    color: var(--green);
+    font-weight: 900;
+  }
+  .ptbl tbody tr.head-row.failed .topic-text {
+    text-decoration: line-through;
+    text-decoration-color: #ef4444;
+    text-decoration-thickness: 2px;
+    color: #fca5a5;
+    opacity: 0.6;
+  }
+  .ptbl tbody tr.head-row.failed .time-cell::before {
+    content: "✗ ";
+    color: var(--red);
+    font-weight: 900;
+  }
   .topic-cell { max-width: 380px; }
   .topic-text {
     font-weight: 500;
@@ -1071,8 +1100,16 @@ function renderPosts() {
       ? `<div style="padding:0 18px 14px"><div style="font-size:10px;color:var(--red);font-weight:700;margin-bottom:4px">❌ ERRORS</div>${errs.map(e => `<div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);padding:8px 10px;border-radius:6px;color:#fca5a5;font-size:11px;font-family:'JetBrains Mono';word-break:break-all;margin-bottom:4px">${esc(e)}</div>`).join("")}</div>`
       : "";
 
+    // Determine row state for strikethrough
+    const successCnt = p.success_count || 0;
+    const errorCnt = p.error_count || 0;
+    let rowCls = "head-row";
+    if (successCnt > 0 && errorCnt === 0) rowCls += " posted";
+    else if (successCnt > 0 && errorCnt > 0) rowCls += " posted partial";
+    else if (errorCnt > 0) rowCls += " failed";
+
     return `
-    <tr class="head-row" onclick="toggleRow(${idx})">
+    <tr class="${rowCls}" onclick="toggleRow(${idx})">
       <td class="time-cell"><span class="expand-icon">▶</span>${esc(t)}</td>
       <td class="topic-cell">
         <div class="topic-text" title="${esc(p.topic)}">${esc(p.topic || "—")}</div>
