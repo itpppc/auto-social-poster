@@ -156,7 +156,21 @@ class AutoPosterWorkflow:
                     from media_uploader import upload_media
                     from datetime import datetime
                     hr = datetime.now().hour
-                    use_video_line = self.ai_video and hr == 18  # video เฉพาะรอบ 18:00
+
+                    # ★ PRIORITY 1: รูป user (resize เป็น LINE spec 1040x1040)
+                    try:
+                        from local_image_pool import get_local_image
+                        from image_resizer import resize_for_line
+                        line_local = get_local_image(niche=line_niche)
+                        if line_local:
+                            resized = resize_for_line(line_local)
+                            line_media_url = upload_media(resized)
+                            line_media_type = "image"
+                            logger.info(f"LINE: ใช้รูป user → {line_local}")
+                    except Exception as e:
+                        logger.warning(f"LINE local image error: {e}")
+
+                    use_video_line = (not line_media_url) and self.ai_video and hr == 18
 
                     if use_video_line:
                         vid_path = self.ai_video.generate_for_post(
@@ -341,7 +355,14 @@ class AutoPosterWorkflow:
 
                 # Post — ลำดับ: local → video → AI image → Pexels → text
                 if local_img:
-                    post_id = self._fb_post_local_image(page_id, token, full_text, local_img)
+                    # Auto-resize รูป user → FB spec (1200x630) ก่อนโพส
+                    try:
+                        from image_resizer import resize_for_facebook
+                        fb_img = resize_for_facebook(local_img)
+                    except Exception as e:
+                        logger.warning(f"FB resize failed, use original: {e}")
+                        fb_img = local_img
+                    post_id = self._fb_post_local_image(page_id, token, full_text, fb_img)
                     has_image, has_video = True, False
                 elif ai_video_path:
                     post_id = self._fb_post_video(page_id, token, full_text, ai_video_path)
