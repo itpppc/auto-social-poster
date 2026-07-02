@@ -173,9 +173,11 @@ class AutoPosterWorkflow:
                             line_media_type = "video"
 
                     if not line_media_url and self.ai_image:
+                        # ใช้ facebook_post ถ้ามี เพราะเนื้อหายาวกว่า → image กว้างกว่า
+                        img_source = (line_content.facebook_post or line_content.line_message)
                         img_path = self.ai_image.generate_for_post(
                             topic=line_content.topic, niche=line_niche,
-                            content_summary=line_content.line_message,
+                            content_summary=img_source,
                         )
                         if img_path:
                             line_media_url = upload_media(img_path)
@@ -293,43 +295,55 @@ class AutoPosterWorkflow:
                 hashtags_str = " ".join(pc.hashtags)
                 full_text    = f"{pc.facebook_post}\n\n{hashtags_str}"
 
-                # สลับ Video/Image ทุกรอบ (1 ใน 3 รอบ = video)
-                # 07:00 = image · 12:00 = video reel · 18:00 = image+slideshow video
                 from datetime import datetime
                 hr = datetime.now().hour
-                use_video = self.ai_video and hr in (12, 18)
 
                 ai_video_path = None
                 ai_image_path = None
 
-                if use_video:
-                    try:
-                        mode = "reel" if hr == 12 else "static"
-                        ai_video_path = self.ai_video.generate_for_post(
-                            topic=pc.topic, niche=page_niche,
-                            content_text=pc.facebook_post[:300], mode=mode,
-                        )
-                    except Exception as e:
-                        logger.warning(f"AI video gen failed: {e}")
+                # ★ PRIORITY 1: รูปที่ user เตรียมไว้เอง (my_images/)
+                local_img = None
+                try:
+                    from local_image_pool import get_local_image
+                    local_img = get_local_image(page_id=page_id, niche=page_niche)
+                    if local_img:
+                        logger.info(f"Page {page_id[-4:]}: ใช้รูปของ user → {local_img}")
+                except Exception as e:
+                    logger.warning(f"local image pool error: {e}")
 
-                # ถ้าไม่ได้ video → ใช้ image
-                if not ai_video_path and self.ai_image:
-                    try:
-                        ai_image_path = self.ai_image.generate_for_post(
-                            topic=pc.topic, niche=page_niche,
-                            content_summary=pc.facebook_post[:200],
-                        )
-                    except Exception as e:
-                        logger.warning(f"AI image gen failed for page {page_id[-4:]}: {e}")
+                # PRIORITY 2: ถ้าไม่มีรูป user → AI video (รอบ 12/18) หรือ AI image
+                if not local_img:
+                    use_video = self.ai_video and hr in (12, 18)
+                    if use_video:
+                        try:
+                            mode = "reel" if hr == 12 else "static"
+                            ai_video_path = self.ai_video.generate_for_post(
+                                topic=pc.topic, niche=page_niche,
+                                content_text=pc.facebook_post, mode=mode,
+                            )
+                        except Exception as e:
+                            logger.warning(f"AI video gen failed: {e}")
 
-                # Pexels stock fallback
+                    if not ai_video_path and self.ai_image:
+                        try:
+                            ai_image_path = self.ai_image.generate_for_post(
+                                topic=pc.topic, niche=page_niche,
+                                content_summary=pc.facebook_post,
+                            )
+                        except Exception as e:
+                            logger.warning(f"AI image gen failed for page {page_id[-4:]}: {e}")
+
+                # PRIORITY 3: Pexels stock
                 image_url = None
-                if not ai_video_path and not ai_image_path and self.fb.image_finder and self.generator:
+                if not local_img and not ai_video_path and not ai_image_path and self.fb.image_finder and self.generator:
                     query = self.generator.get_image_query(pc.topic, page_niche)
                     image_url = self.fb.image_finder.search(query)
 
-                # Post — ลำดับ: video → AI image → Pexels → text
-                if ai_video_path:
+                # Post — ลำดับ: local → video → AI image → Pexels → text
+                if local_img:
+                    post_id = self._fb_post_local_image(page_id, token, full_text, local_img)
+                    has_image, has_video = True, False
+                elif ai_video_path:
                     post_id = self._fb_post_video(page_id, token, full_text, ai_video_path)
                     has_image, has_video = False, True
                 elif ai_image_path:
@@ -344,7 +358,8 @@ class AutoPosterWorkflow:
 
                 results.append({"page_id": page_id, "post_id": post_id, "niche": page_niche,
                                 "has_image": has_image, "has_video": has_video,
-                                "ai_image": ai_image_path is not None, "ai_video": ai_video_path is not None})
+                                "ai_image": ai_image_path is not None, "ai_video": ai_video_path is not None,
+                                "user_image": local_img is not None})
                 st.update_facebook_status(page_id, "success")
             except Exception as e:
                 err = str(e)
