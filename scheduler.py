@@ -1,6 +1,7 @@
 """
 Scheduler — รันอัตโนมัติตามเวลาที่กำหนด
 ใช้ APScheduler ทำงานเป็น background process
++ Catch-up posting: ชดเชยรอบที่ขาดตอน service เริ่ม
 """
 import logging
 import signal
@@ -11,6 +12,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from config import Config
 from workflow import AutoPosterWorkflow
+import catchup
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,34 @@ class AutoPosterScheduler:
         except Exception as e:
             logger.error(f"[SCHEDULER] เกิดข้อผิดพลาด: {e}")
 
+    def _run_catchup_if_needed(self):
+        """ตรวจรอบที่ขาดและโพสต์ชดเชย — รันใน background thread กัน block scheduler"""
+        cfg = catchup.load_catchup_config()
+        if not cfg["enabled"]:
+            logger.info("[CATCHUP] ปิดอยู่ (ENABLE_CATCHUP=false) — ข้าม")
+            return
+
+        # Preview ก่อน เพื่อ log ว่ามี slot ขาดกี่รอบ
+        missed = catchup.find_missed_slots(
+            self.config.post_times,
+            max_age_hours=cfg["max_age_hours"],
+            grace_minutes=cfg["grace_minutes"],
+        )
+        if not missed:
+            logger.info("[CATCHUP] ตรวจแล้ว ไม่มีรอบที่ขาด")
+            return
+
+        times = ", ".join(s.strftime("%H:%M") for s in missed)
+        logger.warning(f"[CATCHUP] พบ {len(missed)} รอบที่ขาดวันนี้ ({times}) — "
+                       f"กำลังโพสต์ชดเชยใน background")
+
+        catchup.run_catchup_async(
+            self.workflow, self.config.post_times,
+            max_age_hours=cfg["max_age_hours"],
+            delay_seconds=cfg["delay_seconds"],
+            grace_minutes=cfg["grace_minutes"],
+        )
+
     def start(self):
         self.setup_jobs()
         print("\n" + "=" * 60)
@@ -67,6 +97,9 @@ class AutoPosterScheduler:
         print(f"Facebook: {'เปิด' if self.config.enable_facebook else 'ปิด'}")
         print(f"LINE: {'เปิด' if self.config.enable_line else 'ปิด'}")
         print(f"TikTok: {'เปิด' if self.config.enable_tiktok else 'ปิด'}")
+        cfg = catchup.load_catchup_config()
+        print(f"Catch-up: {'เปิด' if cfg['enabled'] else 'ปิด'} "
+              f"(max {cfg['max_age_hours']}h, delay {cfg['delay_seconds']}s)")
         print("กด Ctrl+C เพื่อหยุด")
         print("=" * 60 + "\n")
 
@@ -78,6 +111,9 @@ class AutoPosterScheduler:
                 sys.exit(0)
             signal.signal(signal.SIGINT, shutdown)
             signal.signal(signal.SIGTERM, shutdown)
+
+        # ตรวจ catch-up ก่อนเริ่ม blocking scheduler
+        self._run_catchup_if_needed()
 
         self.scheduler.start()
 
