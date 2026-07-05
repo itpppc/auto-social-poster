@@ -5,6 +5,7 @@ Manual Post Watcher — รับคำสั่งโพสต์จาก dash
 """
 import base64
 import logging
+import os
 import tempfile
 import threading
 import time
@@ -244,6 +245,37 @@ def _fb_post_with_local_image(page_id: str, token: str, caption: str, image_path
     return result.get("post_id") or result.get("id", "")
 
 
+MAX_IMAGE_B64 = 8 * 1024 * 1024   # 8MB — กันคน spam payload ใหญ่
+DASHBOARD_PIN = os.getenv("DASHBOARD_PIN", "3094396")
+
+
+def _security_check(item: dict) -> str:
+    """ตรวจความปลอดภัยก่อนประมวลผล — คืน error msg หรือ '' ถ้าผ่าน"""
+    # auth ต้องตรง PIN (defense-in-depth — rules กันชั้นแรกแล้ว)
+    if item.get("auth") != DASHBOARD_PIN:
+        return "unauthorized: missing/invalid auth"
+    if len(item.get("image_b64", "") or "") > MAX_IMAGE_B64:
+        return "payload too large"
+    if len(item.get("topic", "") or "") > 500:
+        return "topic too long"
+    plats = item.get("platforms", [])
+    if not isinstance(plats, list) or len(plats) > 10:
+        return "invalid platforms"
+    return ""
+
+
+def _cleanup_pin_gate(db):
+    """ลบ pin_gate entries เก่ากว่า 1 ชม. (กันสะสม)"""
+    try:
+        gate = db.reference("pin_gate").get() or {}
+        cutoff = (time.time() - 3600) * 1000
+        for k, v in gate.items():
+            if not isinstance(v, dict) or v.get("ts", 0) < cutoff:
+                db.reference(f"pin_gate/{k}").delete()
+    except Exception:
+        pass
+
+
 def watch_manual_queue(config, generator):
     """Polling watcher — เช็ค manual_queue ทุก N วินาที"""
     import firestore_sync as fs
@@ -255,6 +287,7 @@ def watch_manual_queue(config, generator):
     db = fs._db
     queue_ref = db.reference("manual_queue")
     seen = set()
+    last_gate_cleanup = 0
     logger.info("Manual watcher: เริ่มทำงาน (poll ทุก 3 วินาที)")
 
     while True:
@@ -264,8 +297,22 @@ def watch_manual_queue(config, generator):
                 if not isinstance(item, dict): continue
                 if item.get("status") == "pending" and post_id not in seen:
                     seen.add(post_id)
+
+                    # ─ SECURITY CHECK ─
+                    err = _security_check(item)
+                    if err:
+                        logger.warning(f"Manual: REJECTED {post_id} — {err}")
+                        queue_ref.child(post_id).update({"status": "rejected", "error": err})
+                        continue
+                    item.pop("auth", None)  # ไม่ให้ PIN หลุดไปใน log/โพส
+
                     logger.info(f"Manual: พบคำสั่งใหม่ {post_id}")
                     process_manual_post(post_id, item, config, generator)
+
+            # ลบ pin_gate เก่าทุก 10 นาที
+            if time.time() - last_gate_cleanup > 600:
+                _cleanup_pin_gate(db)
+                last_gate_cleanup = time.time()
         except Exception as e:
             logger.error(f"Manual watcher loop error: {e}")
         time.sleep(3)

@@ -1,0 +1,38 @@
+{
+  "rules": {
+    "status": {
+      ".read": true,
+      ".write": false
+    },
+    "posts": {
+      ".read": true,
+      ".write": false
+    },
+    "visitors": {
+      "total": {
+        ".read": true,
+        ".write": "newData.isNumber() && newData.val() < 999999999 && (data.exists() ? (newData.val() === data.val() + 1) : (newData.val() === 50001))"
+      }
+    },
+    "pin_gate": {
+      ".read": false,
+      "$attempt": {
+        ".write": "!data.exists() && newData.child('auth').val() === '3094396'",
+        ".validate": "newData.hasChildren(['auth', 'ts'])"
+      }
+    },
+    "manual_queue": {
+      ".read": false,
+      "$post_id": {
+        ".write": "(!data.exists() && newData.child('auth').val() === '3094396') || (data.exists() && !newData.exists() && data.child('auth').val() === '3094396')",
+        ".validate": "newData.child('topic').isString() && newData.child('topic').val().length <= 500 && newData.child('status').val() === 'pending'"
+      }
+    },
+    "config": {
+      ".read": false,
+      ".write": false
+    },
+    ".read": false,
+    ".write": false
+  }
+}

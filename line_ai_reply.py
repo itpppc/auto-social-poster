@@ -345,13 +345,45 @@ class LineAIReply:
         self.reply(reply_token, messages)
 
 
+# ─── Rate Limiter — กันยิงถล่ม webhook / เผาโควต้า Gemini ───
+_rate_window = []          # timestamps ของ events ล่าสุด
+_RATE_MAX_PER_MIN = 30     # สูงสุด 30 events/นาที
+_user_rate = {}            # per-user: {user_id: [timestamps]}
+_USER_MAX_PER_MIN = 8      # user เดียวสูงสุด 8 ข้อความ/นาที
+
+
+def _rate_ok(user_id: str = "") -> bool:
+    now = time.time()
+    # global
+    global _rate_window
+    _rate_window = [t for t in _rate_window if now - t < 60]
+    if len(_rate_window) >= _RATE_MAX_PER_MIN:
+        return False
+    _rate_window.append(now)
+    # per-user
+    if user_id:
+        lst = [t for t in _user_rate.get(user_id, []) if now - t < 60]
+        if len(lst) >= _USER_MAX_PER_MIN:
+            _user_rate[user_id] = lst
+            return False
+        lst.append(now)
+        _user_rate[user_id] = lst
+        if len(_user_rate) > 500:   # กัน dict โตไม่จำกัด
+            _user_rate.clear()
+    return True
+
+
 def handle_webhook(config, body_bytes: bytes, signature: str) -> dict:
     """Entry point — เรียกจาก Flask webhook route"""
+    # กัน payload ใหญ่ผิดปกติ
+    if len(body_bytes) > 512 * 1024:
+        return {"status": "too_large"}
+
     handler = LineAIReply(config)
 
-    # Verify signature
+    # Verify signature (ข้ามเฉพาะตอนไม่ได้ตั้ง LINE_CHANNEL_SECRET)
     if not handler.verify_signature(body_bytes, signature):
-        logger.warning("LINE webhook signature invalid")
+        logger.warning("LINE webhook signature invalid — rejected")
         return {"status": "invalid_signature"}
 
     try:
@@ -359,8 +391,16 @@ def handle_webhook(config, body_bytes: bytes, signature: str) -> dict:
     except Exception:
         return {"status": "bad_json"}
 
-    for event in data.get("events", []):
+    events = data.get("events", [])
+    if not isinstance(events, list):
+        return {"status": "bad_payload"}
+
+    for event in events[:10]:   # จำกัด 10 events/request
         try:
+            uid = event.get("source", {}).get("userId", "")
+            if not _rate_ok(uid):
+                logger.warning(f"Rate limit hit (user {uid[:8]}) — skipped")
+                continue
             handler.handle_message_event(event)
         except Exception as e:
             logger.error(f"handle event error: {e}")

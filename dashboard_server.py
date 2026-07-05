@@ -21,6 +21,42 @@ load_dotenv(BASE_DIR / ".env")
 app = Flask(__name__)
 CORS(app)
 
+# ═══ SECURITY: Host Guard ═══
+# Tunnel (public) เข้าได้แค่ /line/webhook เท่านั้น — route อื่นเฉพาะ localhost
+_LOCAL_HOSTS = {"localhost:5001", "127.0.0.1:5001", "localhost", "127.0.0.1"}
+_PUBLIC_ALLOWED_PATHS = {"/line/webhook"}
+
+@app.before_request
+def _host_guard():
+    from flask import request, abort
+    host = (request.host or "").lower()
+    if host not in _LOCAL_HOSTS and request.path not in _PUBLIC_ALLOWED_PATHS:
+        abort(403)
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers.pop("Server", None)
+    return resp
+
+# Redact tokens/keys จาก text ก่อนส่งออก
+import re as _re_sec
+_TOKEN_PATTERNS = [
+    _re_sec.compile(r"EAA[0-9A-Za-z]{20,}"),        # Facebook tokens
+    _re_sec.compile(r"AIza[0-9A-Za-z_\-]{30,}"),    # Google API keys
+    _re_sec.compile(r"AQ\.[0-9A-Za-z_\-]{20,}"),    # Gemini keys
+    _re_sec.compile(r"act\.[0-9A-Za-z!._\-]{20,}"), # TikTok access
+    _re_sec.compile(r"rft\.[0-9A-Za-z!._\-]{20,}"), # TikTok refresh
+    _re_sec.compile(r"Bearer\s+\S{15,}"),
+]
+
+def redact(text: str) -> str:
+    for p in _TOKEN_PATTERNS:
+        text = p.sub("[REDACTED]", text)
+    return text
+
 LOG_DIR   = BASE_DIR / "post_logs"
 HTML_FILE = BASE_DIR / "workflow_diagram.html"
 
@@ -206,7 +242,7 @@ def get_log():
     try:
         with open(log_file, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
-        return jsonify([l.rstrip() for l in lines[-100:]])
+        return jsonify([redact(l.rstrip()) for l in lines[-100:]])
     except Exception:
         return jsonify([])
 

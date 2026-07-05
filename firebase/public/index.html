@@ -620,7 +620,7 @@
 <!-- ═══════ FIREBASE SDK ═══════ -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-import { getDatabase, ref, onValue, query, limitToLast } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
+import { getDatabase, ref, onValue, query, limitToLast, push, set } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB-BQw5JyWeSN0ZUYfbkEBmAFNl6EowhQk",
@@ -633,24 +633,42 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-window.__firebase = { db, ref, onValue, query, limitToLast };
+window.__firebase = { db, ref, onValue, query, limitToLast, push, set };
 window.dispatchEvent(new Event("firebaseReady"));
 </script>
 
 <!-- ═══════ APP LOGIC ═══════ -->
 <script>
-// ─── PIN LOCK ───
-const PIN_HASH = "466d229c1c546204bcefcc3ac018a550634d2857739799efe734162dec34fa09";
+// ─── PIN LOCK — verify ฝั่ง SERVER ผ่าน Firebase Rules (ไม่มี hash ในหน้าเว็บ) ───
 const PIN_LENGTH = 7;
 const LOCKOUT_MS = 12 * 60 * 1000;
 const LOCKOUT_KEY = "tonai_lockout_until";
 const TIMES = ["07:00","12:00","18:00"];
 
 let pinBuffer = [];
+window.__pin = null;  // เก็บ PIN ใน memory หลัง unlock (ใช้ auth ตอนสั่งโพส)
 
-async function sha256(t) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+function waitFirebase(timeoutMs = 10000) {
+  return new Promise(resolve => {
+    if (window.__firebase) return resolve(true);
+    const t = setTimeout(() => resolve(false), timeoutMs);
+    window.addEventListener("firebaseReady", () => { clearTimeout(t); resolve(true); }, { once: true });
+  });
+}
+
+async function verifyPinServer(pin) {
+  // ทดลองเขียน pin_gate — Firebase Rules ตรวจ PIN ฝั่ง server
+  // ถูก = เขียนผ่าน / ผิด = PERMISSION_DENIED
+  const ready = await waitFirebase();
+  if (!ready) { alert("เชื่อมต่อ Firebase ไม่ได้ — ลองใหม่"); return null; }
+  const { db, ref, push, set } = window.__firebase;
+  try {
+    const gate = push(ref(db, "pin_gate"));
+    await set(gate, { auth: pin, ts: Date.now() });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function renderPinDots() {
@@ -682,13 +700,22 @@ function startLockout(until) {
 
 async function submitPin() {
   const pin = pinBuffer.join("");
-  const hash = await sha256(pin);
-  if (hash === PIN_HASH) {
+  const sub = document.getElementById("lockSub");
+  if (sub) sub.textContent = "🔐 กำลังตรวจสอบ...";
+  const ok = await verifyPinServer(pin);
+  if (ok === null) {  // network error — ไม่นับเป็น PIN ผิด
+    pinBuffer = []; renderPinDots();
+    if (sub) sub.textContent = "🔒 ใส่ PIN เพื่อเข้าใช้งาน";
+    return;
+  }
+  if (ok) {
+    window.__pin = pin;  // เก็บใน memory สำหรับ auth ตอนสั่งโพส
     document.querySelectorAll(".pin-dot").forEach(d => {
       d.style.background = "var(--green)"; d.style.boxShadow = "0 0 16px var(--green)";
     });
     setTimeout(unlock, 400);
   } else {
+    if (sub) sub.textContent = "🔒 ใส่ PIN เพื่อเข้าใช้งาน";
     flashError();
     const until = Date.now() + LOCKOUT_MS;
     localStorage.setItem(LOCKOUT_KEY, String(until));
