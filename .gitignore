@@ -11,3 +11,6 @@ _backup_for_git/
 _fresh_clone/
 tiktok_auth_url.txt
 firebase/company_site/
+tunnel_url.txt
+line_conversations.json
+cloudflared.exe

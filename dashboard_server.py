@@ -11,7 +11,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-from flask import Flask, jsonify, send_file
+from flask import Flask, jsonify, send_file, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -256,6 +256,31 @@ def trigger_post_now():
 
     threading.Thread(target=_bg, daemon=True).start()
     return jsonify({"status": "post_started"})
+
+
+# ────────────────────────────────────────────────
+# LINE Webhook — AI ตอบลูกค้าอัตโนมัติ
+# ────────────────────────────────────────────────
+@app.route("/line/webhook", methods=["POST"])
+def line_webhook():
+    """รับข้อความจากลูกค้าใน LINE → AI ตอบ"""
+    try:
+        from config import Config
+        from line_ai_reply import handle_webhook
+        body = request.get_data()
+        signature = request.headers.get("X-Line-Signature", "")
+        result = handle_webhook(Config(), body, signature)
+        return jsonify(result), 200
+    except Exception as e:
+        import logging
+        logging.getLogger("webhook").error(f"LINE webhook error: {e}")
+        return jsonify({"status": "error", "msg": str(e)}), 200  # 200 กัน LINE retry
+
+
+@app.route("/line/webhook", methods=["GET"])
+def line_webhook_verify():
+    """LINE verify endpoint"""
+    return "LINE webhook OK", 200
 
 
 def find_free_port(start=5001, end=5010):

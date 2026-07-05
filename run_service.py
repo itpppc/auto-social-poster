@@ -58,6 +58,12 @@ def run_manual_watcher():
     manual_watcher.watch_manual_queue(config, generator)  # blocking
 
 
+def run_tunnel():
+    """Cloudflare Tunnel — public URL สำหรับ LINE webhook (AI ตอบลูกค้า)"""
+    import tunnel_manager
+    tunnel_manager.run_tunnel(port=5001)  # blocking
+
+
 # ── Watchdog ─────────────────────────────────────────────
 
 def watchdog(name: str, fn):
@@ -88,6 +94,7 @@ if __name__ == "__main__":
         ("Scheduler",     run_scheduler),
         ("Dashboard",     run_dashboard),
         ("ManualWatcher", run_manual_watcher),
+        ("Tunnel",        run_tunnel),
     ]
 
     threads = []
