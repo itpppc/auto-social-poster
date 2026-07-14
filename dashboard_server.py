@@ -24,7 +24,7 @@ CORS(app)
 # ═══ SECURITY: Host Guard ═══
 # Tunnel (public) เข้าได้แค่ /line/webhook เท่านั้น — route อื่นเฉพาะ localhost
 _LOCAL_HOSTS = {"localhost:5001", "127.0.0.1:5001", "localhost", "127.0.0.1"}
-_PUBLIC_ALLOWED_PATHS = {"/line/webhook"}
+_PUBLIC_ALLOWED_PATHS = {"/line/webhook", "/fb/webhook"}
 
 @app.before_request
 def _host_guard():
@@ -329,6 +329,33 @@ def line_webhook():
 def line_webhook_verify():
     """LINE verify endpoint"""
     return "LINE webhook OK", 200
+
+
+@app.route("/fb/webhook", methods=["GET"])
+def fb_webhook_verify():
+    """Facebook Messenger webhook verification"""
+    from fb_messenger_reply import verify_challenge
+    result, code = verify_challenge(
+        request.args.get("hub.mode", ""),
+        request.args.get("hub.verify_token", ""),
+        request.args.get("hub.challenge", ""),
+    )
+    return result, code
+
+
+@app.route("/fb/webhook", methods=["POST"])
+def fb_webhook():
+    """Facebook Messenger — AI ตอบลูกค้าอัตโนมัติ"""
+    try:
+        from config import Config
+        from fb_messenger_reply import handle_webhook
+        body = request.get_data()
+        sig = request.headers.get("X-Hub-Signature-256", "")
+        return jsonify(handle_webhook(Config(), body, sig)), 200
+    except Exception as e:
+        import logging
+        logging.getLogger("fb_webhook").error(f"FB webhook error: {e}")
+        return jsonify({"status": "error"}), 200
 
 
 def find_free_port(start=5001, end=5010):
