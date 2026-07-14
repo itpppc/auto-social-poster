@@ -38,7 +38,19 @@ def _security_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://www.gstatic.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; "
+        "connect-src 'self' https://*.firebasedatabase.app https://*.googleapis.com wss://*.firebasedatabase.app; "
+        "img-src 'self' data: https:; "
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    )
+    resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     resp.headers.pop("Server", None)
+    resp.headers["Server"] = "TonAI"
     return resp
 
 # Redact tokens/keys จาก text ก่อนส่งออก
